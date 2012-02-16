@@ -550,6 +550,16 @@ local_burst_decode(struct l1ctl_burst_ind *bi)
 		for (i=59; i<116; i++)  bt[i] ^= ks[i-2];
 	}
 
+	fprintf( app_state.fh, "P %d ", ntohl(bi->frame_nr));
+
+
+	for (i=0; i<57; i++)
+		fprintf( app_state.fh, "%d", bt[i] );
+	for (i=59; i<116; i++)
+		fprintf( app_state.fh, "%d", bt[i] );
+
+     fprintf( app_state.fh, "\n" );
+
 	/* Convert to softbits */
 	for (i=0; i<116; i++)
 		bursts[(116*bid)+i] = bt[i] ? - (bi->snr >> 1) : (bi->snr >> 1);
@@ -565,6 +575,11 @@ local_burst_decode(struct l1ctl_burst_ind *bi)
 		{
 			uint8_t chan_type, chan_ts, chan_ss;
 			uint8_t gsmtap_chan_type;
+
+            fprintf( app_state.fh,"F ");
+            for  (i=0; i<23; i++)
+                fprintf( app_state.fh, "%x ", l2[i]);
+            fprintf( app_state.fh, "\n");
 
 			/* Send to GSMTAP */
 			rsl_dec_chan_nr(bi->chan_nr, &chan_type, &chan_ss, &chan_ts);
@@ -684,7 +699,7 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 	/* Save the burst to airprobe format */
 	if (app_state.dch_state == DCH_ACTIVE)
 	{
-	    fprintf( app_state.fh, "%d ", ntohl(bi->frame_nr));
+	    fprintf( app_state.fh, "C %d ", ntohl(bi->frame_nr));
 
 	    /* Unpack (ignore hu/hl) */
 	    osmo_pbit2ubit_ext(bt,  0, bi->bits,  0, 57, 0);

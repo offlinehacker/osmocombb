@@ -58,16 +58,14 @@ extern struct gsmtap_inst *gsmtap_inst;
 static struct {
 	int			dch_ciph;
 
-    ubit_t raw_bursts[MAX_BURST_COUNT][114];
-    int burst_count;
+	ubit_t raw_bursts[MAX_BURST_COUNT][114];
+	int burst_count;
+	int error_rate=0;
 
-	sbit_t			bursts_dl[116 * 4];
-	sbit_t			bursts_ul[116 * 4];
-
-	uint8_t			kc[8];
-    uint8_t         snr;
-    int         ul;
-    uint32_t    start_fn;
+	uint8_t	kc[8];
+	uint8_t snr;
+	int ul;
+	uint32_t start_fn;
 } app_state;
 
 static void
@@ -86,6 +84,7 @@ bursts_decode()
 {
     int i, j;
     sbit_t bursts[116 * 4];
+    sbit_t raw_bursts[4][114];
 
     printf("Decoding burst...\n");
 
@@ -123,9 +122,16 @@ bursts_decode()
 				ntohl(app_state.start_fn), 0, app_state.snr,
 				l2, sizeof(l2)
 			);
+
+			xcch_encode(raw_bursts, l2);
+			for(i=0; i<4; i++)
+				for(j=0; j<114; j++)
+					if(raw_bursts[i][j]!=app_state.raw_bursts[i][j])
+						app_status.error_rate++;
 		}
 		else
 			LOGP(DRR, LOGL_NOTICE, "Error decoding data, data encripted?\n");
+		printf("ERROR RATE: %d\n", app_status.error_rate;
 }
 
 static int l23_getopt_options(struct option **options)

@@ -117,6 +117,18 @@ xcch_deinterleave(sbit_t *cB, sbit_t *iB)
 }
 
 static void
+xcch_interleave(sbit_t *iB, sbit_t *cB) {
+	int j, k, B;
+
+	// GSM 05.03, 4.1.4.  Verbatim.
+	for (k = 0; k < 456; k++) {
+		B = k % 4;
+		j = 2 * ((49 * k) % 57) + ((k % 8) / 4);
+		iB[B * 114 + j] = cB[k];
+	}
+}
+
+static void
 xcch_burst_unmap(sbit_t *iB, sbit_t *eB, sbit_t *hl, sbit_t *hn)
 {
 	memcpy(iB,    eB,    57);
@@ -148,6 +160,19 @@ xcch_decode(uint8_t *l2_data, sbit_t *bursts)
 		return -1;
 
 	osmo_ubit2pbit_ext(l2_data, 0, conv, 0, 184, 1);
+
+	return 0;
+}
+
+int
+xcch_encode(ubit_t *bursts, uint8_t *l2_data)
+{
+        sbit_t iB[456], cB[456];
+	ubit_t conv[224];
+
+	osmo_pbit2ubit_ext(conv, 0, l2_data, 0, 184, 1):
+	osmo_conv_encode(&conv_xcch, conv, cB);
+	xcch_deinterleave(bursts, cB);
 
 	return 0;
 }

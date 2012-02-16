@@ -60,13 +60,22 @@ static struct {
 
 	ubit_t raw_bursts[MAX_BURST_COUNT][114];
 	int burst_count;
-	int error_rate=0;
+	int error_rate;
 
 	uint8_t	kc[8];
 	uint8_t snr;
 	int ul;
 	uint32_t start_fn;
 } app_state;
+
+static void print_burst( ubit_t *burst )
+{
+    int x;
+
+    for (x=0;x<114;x++)
+        printf("%d", burst[x]);
+    printf("\n");
+}
 
 static void
 burst_decipher(ubit_t *p_burst, ubit_t *c_burst, uint32_t fn)
@@ -126,12 +135,15 @@ bursts_decode()
 			xcch_encode(raw_bursts, l2);
 			for(i=0; i<4; i++)
 				for(j=0; j<114; j++)
-					if(raw_bursts[i][j]!=app_state.raw_bursts[i][j])
-						app_status.error_rate++;
+					if( raw_bursts[i][j]!=app_state.raw_bursts[i][j])
+						app_state.error_rate++;
+            printf("Correct raw bursts:\n");
+            for(i=0;i<4;i++)
+                print_burst(raw_bursts[i]);
 		}
 		else
 			LOGP(DRR, LOGL_NOTICE, "Error decoding data, data encripted?\n");
-		printf("ERROR RATE: %d\n", app_status.error_rate;
+		printf("ERROR RATE: %f\n", app_state.error_rate/(114.0*4.0));
 }
 
 static int l23_getopt_options(struct option **options)
@@ -197,15 +209,6 @@ static int l23_cfg_handle(int c, const char *optarg)
 	return 0;
 }
 
-static void print_burst( ubit_t *burst )
-{
-    int x;
-
-    for (x=0;x<114;x++)
-        printf("%d", burst[x]);
-    printf("\n");
-}
-
 int l23_app_wo()
 {
     int x;
@@ -235,6 +238,7 @@ int l23_app_in()
     app_state.snr= 60;
     app_state.dch_ciph= 0;
     app_state.ul= 0;
+    app_state.error_rate= 0;
 
     return 1;
 }

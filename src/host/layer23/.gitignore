@@ -33,4 +33,8 @@ src/misc/echo_test
 src/misc/cbch_sniff
 src/misc/ccch_scan
 src/misc/layer23
+src/misc/burst_decode
+src/misc/*.dat
+src/misc/cell_log_*
+src/misc/KC
 src/mobile/mobile

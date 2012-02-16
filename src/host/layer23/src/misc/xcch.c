@@ -19,9 +19,7 @@
  *      = x^40 + x^26 + x^23 + x^17 + x^3 + 1
  */
 
-
-static int
-xcch_parity_check(ubit_t *d)
+uint64_t xcch_fire_crc(ubit_t *d)
 {
 	const uint64_t poly      = 0x0004820009ULL;
 	const uint64_t remainder = 0xffffffffffULL;
@@ -43,6 +41,18 @@ xcch_parity_check(ubit_t *d)
 
 	crc ^= remainder;
 
+    return crc;
+}
+
+
+static int
+xcch_parity_check(ubit_t *d)
+{
+	uint64_t crc;
+	int i;
+
+    crc= xcch_fire_crc(d);
+
 	/* Check it */
 	for (i=0; i<40; i++)
 		if (d[184+i] ^ ((crc >> (39-i)) & 1))
@@ -51,6 +61,19 @@ xcch_parity_check(ubit_t *d)
 	return 0;
 }
 
+static void
+xcch_parity_write(ubit_t *d)
+{
+	uint64_t crc;
+	int i;
+
+    crc= xcch_fire_crc(d);
+
+    for (i=0; i<40; i++)
+    {
+        d[184+i]=  ((crc >> (39-i)) & 1);
+    }
+}
 
 /*
  * GSM xCCH convolutional coding
@@ -167,12 +190,13 @@ xcch_decode(uint8_t *l2_data, sbit_t *bursts)
 int
 xcch_encode(ubit_t *bursts, uint8_t *l2_data)
 {
-        sbit_t iB[456], cB[456];
+    sbit_t iB[456], cB[456];
 	ubit_t conv[224];
 
-	osmo_pbit2ubit_ext(conv, 0, l2_data, 0, 184, 1):
+	osmo_pbit2ubit_ext(conv, 0, l2_data, 0, 184, 1);
+    xcch_parity_write(conv);
 	osmo_conv_encode(&conv_xcch, conv, cB);
-	xcch_deinterleave(bursts, cB);
+	xcch_interleave(bursts, cB);
 
 	return 0;
 }

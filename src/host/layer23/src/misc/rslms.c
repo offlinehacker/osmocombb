@@ -76,7 +76,9 @@ static int rslms_rx_udata_ind(struct msgb *msg, struct osmocom_ms *ms)
 		rc = gsm48_rx_ccch(msg, ms);
 	} else if (rllh->chan_nr == RSL_CHAN_BCCH) {
 		rc = gsm48_rx_bcch(msg, ms);
-	}
+	} else if (rllh->chan_nr == RSL_CHANNEED_SDCCH) {
+        rc = gsm48_rx_sdcch(msg, ms);
+    }
 
 	return rc;
 }

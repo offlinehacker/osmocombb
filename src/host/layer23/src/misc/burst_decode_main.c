@@ -168,7 +168,7 @@ int main(int argc, char **argv)
 	log_add_target(stderr_target);
 	log_set_all_filter(stderr_target, 1);
 
-	print_copyright();
+	//print_copyright();
 
     l23_app_in();
 	handle_options(argc, argv);

@@ -62,6 +62,8 @@ static struct {
 	int burst_count;
 	int error_rate;
 
+    int decoded;
+
 	uint8_t	kc[8];
 	uint8_t snr;
 	int ul;
@@ -120,6 +122,8 @@ bursts_decode()
 			uint8_t chan_type, chan_ts, chan_ss;
 			uint8_t gsmtap_chan_type;
 
+            app_state.decoded= 1;
+
             printf( "RAW DATA: ");
             for  (i=0; i<23; i++)
                 printf( "%x ", l2[i]);
@@ -127,8 +131,8 @@ bursts_decode()
 
 			/* Send to GSMTAP */
 			gsmtap_send(gsmtap_inst,
-				0, 0, 0, 0,
-				ntohl(app_state.start_fn), 0, app_state.snr,
+				78, 1, 8, 1,
+				ntohl(app_state.start_fn), 255, app_state.snr,
 				l2, sizeof(l2)
 			);
 
@@ -228,6 +232,9 @@ int l23_app_wo()
         for(x=0;x<app_state.burst_count;x++)
             print_burst(bursts[x]);
     }
+
+    if(app_state.decoded)
+        osmo_select_main(0);
 
     return 1;
 }

@@ -6,10 +6,145 @@ import re
 import random
 import io
 import sys
+import os, fcntl, fcntl, termios, termios
 
 from lxml import etree
 from lxml import objectify
 from io import FileIO
+
+class capturedecode(object):
+    ################################################################## 
+    # Establish a serial-port connection w. required settings. 
+    ################################################################## 
+    def openSerial(self, portName="/dev/ttyUSB0"): 
+        # The open attempt may fail on account of permissions or on 
+        # account of somebody's already using the port. 
+        # Pass such exceptions on to our client. 
+        try: 
+            # You probably just want to use the builtin open(), here... 
+            fd = open(portName, 'rw+', 0) 
+            # Set up symbolic constants for the list elements returned by 
+            # tcgetattr. 
+            [iflag, oflag, cflag, lflag, ispeed, ospeed, cc] = range(7) 
+            # Set the port baud rate, etc. 
+            settings = termios.tcgetattr(fd) 
+            # Set the baud rate. 
+            settings[ospeed] = termios.B9600 # Output speed 
+            settings[ispeed] = termios.B0    # Input speed (B0 => match output) 
+            # Go for 8N1 with hardware handshaking. 
+            settings[cflag] = (((settings[cflag] & ~termios.CSIZE) | 
+                                termios.CS8) & ~termios.PARENB) 
+            # NOTE:  This code relies on an UNDOCUMENTED 
+            # feature of Solaris 2.4. Answerbook explicitly states 
+            # that CRTSCTS will not work.  After much searching you 
+            # will discover that termiox ioctl() calls are to 
+            # be used for this purpose.  After reviewing Sunsolve 
+            # databases, you will find that termiox's TCGETX/TCSETX 
+            # are not implemented.  *snarl* 
+            settings[cflag] = settings[cflag] | termios.CRTSCTS 
+            # Don't echo received chars, or do erase or kill input processing. 
+            settings[lflag] = (settings[lflag] & 
+                               ~(termios.ECHO | termios.ICANON)) 
+            # Do NO output processing. 
+            settings[oflag] = 0 
+            # When reading, always return immediately, regardless of 
+            # how many characters are available. 
+            settings[cc][termios.VMIN] = 0 
+            settings[cc][termios.VTIME] = 0 
+            # Install the modified line settings. 
+            termios.tcsetattr(fd, termios.TCSANOW, settings) 
+            # Set it up for non-blocking I/O. 
+            #fcntl.fcntl(fd, FCNTL.F_SETFL, FCNTL.O_NONBLOCK) 
+        except os.error, info: 
+            # If any of this fails, mention the port name in the 
+            # exception. 
+            raise os.error, "Can't open %s: %s" % (portName, info)
+
+        return fd
+
+    def ModemGetKcFromRand( self, fd, rand ):
+        fd.write('AT+CSIM=14,"A0A40000027F20"\r\n')
+        result= fd.readlines()
+        print result
+        if not "OK" in result:
+            return None
+
+        fd.write('AT+CSIM=42,"A088000010%s' % (rand,))
+        result= fd.readlines()
+        result= re.search("\"([0-9abcdef]+)\"", result)
+        if result:
+            return result.group(1)[8:]
+
+        return None
+
+    def SmartDecode( self, capture_file, serial_port ):
+        fd= self.openSerial(serial_port)
+
+        out= subprocess.check_output(" ./captures/location_updates %s" % (capture_file,) )
+        lines= out.split("\n")
+        print lines
+
+        frameno= 0
+        tmsi= ""
+        rand= ""
+        results={}
+        for line in lines:
+            if frameno and tmsi and rand:
+                results[tmsi]= { "frameno": [frameno,], "kc": self.ModemGetKcFromRand(fd, rand)}
+
+                frameno= 0
+                tmsi= ""
+                rand= ""
+                continue
+
+            result= re.search('(\d+)\s+0x([0-9abcdef]+)', line)
+            if result:
+                frameno= int(result.group(1))
+                tmsi= result.group(2)
+
+            if tmsi:
+                result= re.search("([0-9abcdef:]+)", line)
+                if result:
+                    rand= result.group(1).replace(":", "")
+
+        out= subprocess.check_output(" ./captures/paging_responses %s" % (capture_file,) )
+        lines= out.split("\n")
+        print lines
+
+        for line in lines:
+            result= re.search('(\d+)\s+0x([0-9abcdef]+)', line)
+            if not result:
+                continue
+
+            if result.group(2) in results:
+                if int(result.group(1)) in results[result.group(2)]["frameno"]:
+                        continue
+                results[result.group(2)]["frameno"].append(int(result.group(1)))
+
+        for tmsi in results:
+            for frameno in results[tmsi]["frameno"]:
+                self.DecodeData( frameno, results[tmsi]["kc"] )
+
+        fd.close()
+
+    def DecodeBursts( self, frameno, kc ):
+        max= sys.maxint
+        result= None
+
+        files= os.listdir(".")
+        for file in files:
+            if ".dat" in file:
+                bursts_info= file.split("_")
+                frameno2= int(bursts_info[4])
+                if abs(frameno-frameno2)<max:
+                    max= abs(frameno-frameno2)
+                    result= file
+
+        if result:
+            c=gsmcrack(result)
+
+            print "Decoded bursts", result
+            print c.DecodeData(kc)
 
 class gsmcrack(object):
     def ErrorRate( self, ul ):
@@ -28,6 +163,14 @@ class gsmcrack(object):
             r = r+chr(48^a^b)
 
         return r
+
+    def DecodeData( self, kc ):
+        frames= self.data.xpath("/scan/frame")
+        data= []
+        for frame in frames:
+            data.append(self.RunDecodeBursts( frame, kc ))
+
+        return data
 
     def CrackData( self, PredictFile=None ):
         uplink= True
@@ -107,21 +250,16 @@ class gsmcrack(object):
                     else:
                         a= 1
 
-                    print "Trying to find Kc first time"
-                    keystream1= self.xor(bursts[i+a*2].cyphertext.text.strip(), plaintexts[i+a*2].strip())
-                    key_result= self.RunFindKc( result[0], result[1],
-                            int(bursts[i].attrib["fn"]), int(bursts[i+a*2].attrib["fn"]),
-                            keystream1 )
-                    if key_result:
-                        return key_result
-
-                    print "Trying to find Kc second time"
-                    keystream2= self.xor(bursts[i+a].cyphertext.text.strip(), plaintexts[i+a].strip())
-                    key_result= self.RunFindKc( result[0], result[1],
-                            int(bursts[i].attrib["fn"]), int(bursts[i+a].attrib["fn"]),
-                            keystream2 )
-                    if key_result:
-                        return key_result
+                    test= random.sample(range(0,len(bursts)), len(bursts))
+                    del test[test.index(i)]
+                    for j in test:
+                        print "Trying to find Kc for burst", j
+                        keystream= self.xor(bursts[j].cyphertext.text.strip(), plaintexts[j].strip())
+                        key_result= self.RunFindKc( result[0], result[1],
+                                int(bursts[i].attrib["fn"]), int(bursts[j].attrib["fn"]),
+                                keystream )
+                        if key_result:
+                            return key_result
 
                     print "We give up, continue..."
 
@@ -132,6 +270,24 @@ class gsmcrack(object):
         result= result.xpath("/frame/burst/text()")
 
         return result
+
+    def RunDecodeBursts( self, frame, kc ) :
+        out=""
+        for burst in frame.xpath("burst"):
+            out+= "--burst %s " % (burst.cyphertext.text.strip(),)
+
+        main_params= "./burst_decode -i 127.0.0.1 --ul %d --fn %d " % (int(frame.attrib["uplink"]), int(frame.xpath("burst")[0].attrib["fn"]),)
+
+        if int(frame.attrib["cipher"])==1:
+            result= subprocess.check_output(main_params + out + " --kc " + kc, shell=True)
+        else:
+            result= subprocess.check_output(main_params + out , shell=True)
+
+        result= re.search("RAW\sDATA:\s+([0-9abcdef ]+)", result)
+        if result:
+            return result.group(1)
+
+        return None
 
     def GetFrameCount( self, frameno):
         t1= int(frameno)/1326
@@ -164,7 +320,7 @@ class gsmcrack(object):
         tn= telnetlib.Telnet(self.kraken_ip, self.kraken_port)
         tn.write("crack %s\r\n" % keystream)
 
-        id= 0
+        id= -1
         result=[]
         while 1:
             try:
@@ -177,6 +333,9 @@ class gsmcrack(object):
                 break
 
             if index==-1:
+                if id==-1:
+                    tn.write("crack %s\r\n" % keystream)
+                    continue
                 break
             elif index==2 and match.group(2) in keystream:
                 id=match.group(1)
@@ -193,7 +352,7 @@ class gsmcrack(object):
         tn.close()
         return result
 
-    def __init__( self, filename, kraken_ip, kraken_port ):
+    def __init__( self, filename, kraken_ip="localhost", kraken_port=5555 ):
         self.data= objectify.parse(FileIO(filename))
         self.kraken_ip= kraken_ip
         self.kraken_port= kraken_port

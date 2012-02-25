@@ -702,14 +702,25 @@ local_burst_decode(struct l1ctl_burst_ind *bi)
     {
         uint8_t l2[23];
         int rv;
+        uint8_t chan_type, chan_ts, chan_ss;
+        uint8_t gsmtap_chan_type;
+
         ubit_t raw_bursts[4][114];
         rv = xcch_decode(l2, bursts);
 
+		/* Get channel type for GSMTAP */
+		rsl_dec_chan_nr(bi->chan_nr, &chan_type, &chan_ss, &chan_ts);
+		gsmtap_chan_type = chantype_rsl2gsmtap(
+			chan_type,
+			bi->flags & BI_FLG_SACCH ? 0x40 : 0x00
+		);
+
+        if(app_state.xml)
+            fprintf( app_state.fh, "<chan_type>%d</chan_type>\n", gsmtap_chan_type );
+
+
         if (rv == 0)
         {
-            uint8_t chan_type, chan_ts, chan_ss;
-            uint8_t gsmtap_chan_type;
-
             /* Data in xml readable format */
             if(app_state.xml) {
                 //Data dump
@@ -731,12 +742,7 @@ local_burst_decode(struct l1ctl_burst_ind *bi)
                 fprintf( app_state.fh,"<error>%f</error>\n", rv/(114.0*4.0));
             }
 
-			/* Send to GSMTAP */
-			rsl_dec_chan_nr(bi->chan_nr, &chan_type, &chan_ss, &chan_ts);
-			gsmtap_chan_type = chantype_rsl2gsmtap(
-				chan_type,
-				bi->flags & BI_FLG_SACCH ? 0x40 : 0x00
-			);
+            /* Send to GSMTAP */
 			LOGP(DRR, LOGL_NOTICE, "Burst data\n");
 			gsmtap_send(gsmtap_inst,
 				arfcn, chan_ts, gsmtap_chan_type, chan_ss,

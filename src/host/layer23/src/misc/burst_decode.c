@@ -66,8 +66,9 @@ static struct {
 
 	uint8_t	kc[8];
 	uint8_t snr;
-	int ul;
+	uint8_t ul;
 	uint32_t start_fn;
+    uint8_t channel_type;
 } app_state;
 
 static void print_burst( ubit_t *burst )
@@ -131,8 +132,8 @@ bursts_decode()
 
 			/* Send to GSMTAP */
 			gsmtap_send(gsmtap_inst,
-				78, 1, 8, 1,
-				ntohl(app_state.start_fn), 255, app_state.snr,
+				78, 1, app_state.channel_type, 1,
+				app_state.start_fn, 255, app_state.snr,
 				l2, sizeof(l2)
 			);
 
@@ -169,9 +170,10 @@ static int l23_cfg_print_help()
 	printf("\nApplication specific\n");
 	printf("  -k --kc KEY Key to use to try to decipher\n");
     printf("  -b --burst BURST Burst we want to decipher if kc is provided and decode if count is more than one\n");
-    printf("  -s --snr SNR Signal to noise ration");
-    printf("  -f --fn FN Frame number for first burst");
-    printf("  -u --ul UL Uplink or downlink");
+    printf("  -s --snr SNR Signal to noise ration\n");
+    printf("  -f --fn FN Frame number for first burst\n");
+    printf("  -u --ul UL Uplink or downlink\n");
+    printf("  -t --type TYPE Channel type as int\n");
 
 	return 0;
 }
@@ -205,8 +207,12 @@ static int l23_cfg_handle(int c, const char *optarg)
     case 'f':
         app_state.start_fn=  atoi(optarg);
         break;
+    case 't':
+        app_state.channel_type= atoi(optarg);
+        break;
     case 'u':
-        app_state.ul= 1;
+        app_state.ul= atoi(optarg);
+        break;
 	default:
 		return -1;
 	}
@@ -244,8 +250,8 @@ int l23_app_in()
     app_state.burst_count= 0;
     app_state.snr= 60;
     app_state.dch_ciph= 0;
-    app_state.ul= 0;
     app_state.error_rate= 0;
+    app_state.start_fn= 0;
 
     return 1;
 }
@@ -253,7 +259,7 @@ int l23_app_in()
 static struct l23_app_info info = {
 	.copyright	= "Copyright (C) 2010 Harald Welte <laforge@gnumonks.org>\n",
 	.contribution	= "Contributions by Jaka Hudoklin\n",
-	.getopt_string	= "k:b:s:f:u:",
+	.getopt_string	= "k:b:s:f:u:t:",
 	.cfg_getopt_opt = l23_getopt_options,
 	.cfg_handle_opt	= l23_cfg_handle,
 	.cfg_print_help	= l23_cfg_print_help,

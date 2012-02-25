@@ -11,76 +11,28 @@ import os, fcntl, fcntl, termios, termios
 from lxml import etree
 from lxml import objectify
 from io import FileIO
+from binascii import *
+from card.utils import *
+from card.SIM import SIM
 
 class capturedecode(object):
-    ################################################################## 
-    # Establish a serial-port connection w. required settings. 
-    ################################################################## 
-    def openSerial(self, portName="/dev/ttyUSB0"): 
-        # The open attempt may fail on account of permissions or on 
-        # account of somebody's already using the port. 
-        # Pass such exceptions on to our client. 
-        try: 
-            # You probably just want to use the builtin open(), here... 
-            fd = open(portName, 'rw+', 0) 
-            # Set up symbolic constants for the list elements returned by 
-            # tcgetattr. 
-            [iflag, oflag, cflag, lflag, ispeed, ospeed, cc] = range(7) 
-            # Set the port baud rate, etc. 
-            settings = termios.tcgetattr(fd) 
-            # Set the baud rate. 
-            settings[ospeed] = termios.B9600 # Output speed 
-            settings[ispeed] = termios.B0    # Input speed (B0 => match output) 
-            # Go for 8N1 with hardware handshaking. 
-            settings[cflag] = (((settings[cflag] & ~termios.CSIZE) | 
-                                termios.CS8) & ~termios.PARENB) 
-            # NOTE:  This code relies on an UNDOCUMENTED 
-            # feature of Solaris 2.4. Answerbook explicitly states 
-            # that CRTSCTS will not work.  After much searching you 
-            # will discover that termiox ioctl() calls are to 
-            # be used for this purpose.  After reviewing Sunsolve 
-            # databases, you will find that termiox's TCGETX/TCSETX 
-            # are not implemented.  *snarl* 
-            settings[cflag] = settings[cflag] | termios.CRTSCTS 
-            # Don't echo received chars, or do erase or kill input processing. 
-            settings[lflag] = (settings[lflag] & 
-                               ~(termios.ECHO | termios.ICANON)) 
-            # Do NO output processing. 
-            settings[oflag] = 0 
-            # When reading, always return immediately, regardless of 
-            # how many characters are available. 
-            settings[cc][termios.VMIN] = 0 
-            settings[cc][termios.VTIME] = 0 
-            # Install the modified line settings. 
-            termios.tcsetattr(fd, termios.TCSANOW, settings) 
-            # Set it up for non-blocking I/O. 
-            #fcntl.fcntl(fd, FCNTL.F_SETFL, FCNTL.O_NONBLOCK) 
-        except os.error, info: 
-            # If any of this fails, mention the port name in the 
-            # exception. 
-            raise os.error, "Can't open %s: %s" % (portName, info)
+    def SmartCardGetKcFromRand(self, rand, pin=None):
+	s= SIM()
+	if not s:
+		print "Error opening SIM"
+		exit(1)
 
-        return fd
+        if pin:
+            s.verify_pin(pin)
 
-    def ModemGetKcFromRand( self, fd, rand ):
-        fd.write('AT+CSIM=14,"A0A40000027F20"\r\n')
-        result= fd.readlines()
-        print result
-        if not "OK" in result:
-            return None
+        rand_bin= stringToByte(a2b_hex(rand))
 
-        fd.write('AT+CSIM=42,"A088000010%s' % (rand,))
-        result= fd.readlines()
-        result= re.search("\"([0-9abcdef]+)\"", result)
-        if result:
-            return result.group(1)[8:]
+	print "\nGSM Authentication"
+	ret = s.run_gsm_alg(rand_bin)
+	return b2a_hex(byteToString(ret[1]))
 
-        return None
-
-    def SmartDecode( self, capture_file, serial_port ):
-        fd= self.openSerial(serial_port)
-
-        out= subprocess.check_output(" ./captures/location_updates %s" % (capture_file,) )
+    def SmartDecode( self, capture_file, pin=None ):
+        out= subprocess.check_output(" ./captures/location_updates %s" % (capture_file,), shell=True)
         lines= out.split("\n")
         print lines
 
@@ -90,24 +42,32 @@ class capturedecode(object):
         results={}
         for line in lines:
             if frameno and tmsi and rand:
-                results[tmsi]= { "frameno": [frameno,], "kc": self.ModemGetKcFromRand(fd, rand)}
+                if tmsi not in results:
+                    results[tmsi]= { frameno: {"kc": self.SmartCardGetKcFromRand(rand, pin), "frameno": [frameno,] }}
+                else:
+                    results[tmsi][frameno]= {"kc":  self.SmartCardGetKcFromRand(rand, pin), "frameno": [frameno,]}
+                print "KC:", results[tmsi][frameno]["kc"]
 
                 frameno= 0
                 tmsi= ""
                 rand= ""
-                continue
 
             result= re.search('(\d+)\s+0x([0-9abcdef]+)', line)
             if result:
                 frameno= int(result.group(1))
                 tmsi= result.group(2)
+                print "TMSI:", tmsi
+                print "FRAMENO:", frameno
+
+                continue
 
             if tmsi:
-                result= re.search("([0-9abcdef:]+)", line)
+                result= re.search("([0-9abcdef:]{47})", line)
                 if result:
                     rand= result.group(1).replace(":", "")
+                    print "RAND:", rand
 
-        out= subprocess.check_output(" ./captures/paging_responses %s" % (capture_file,) )
+        out= subprocess.check_output("./captures/paging_responses %s" % (capture_file,), shell=True)
         lines= out.split("\n")
         print lines
 
@@ -116,16 +76,22 @@ class capturedecode(object):
             if not result:
                 continue
 
-            if result.group(2) in results:
-                if int(result.group(1)) in results[result.group(2)]["frameno"]:
-                        continue
-                results[result.group(2)]["frameno"].append(int(result.group(1)))
+            frameno= int(result.group(1))
+            tmsi= result.group(2)
+
+            if tmsi not in results:
+                continue
+
+            closest_lu_frameno= min(filter(lambda x:frameno>x,results[tmsi].keys()), key=lambda x:abs(frameno-x))
+
+            if int(frameno) in results[tmsi][closest_lu_frameno]["frameno"]:
+                    continue
+            results[tmsi][closest_lu_frameno]["frameno"].append(int(frameno))
 
         for tmsi in results:
-            for frameno in results[tmsi]["frameno"]:
-                self.DecodeData( frameno, results[tmsi]["kc"] )
-
-        fd.close()
+            for lu_frameno in results[tmsi]:
+                for frameno in results[tmsi][lu_frameno]["frameno"]:
+                    self.DecodeBursts( frameno, results[tmsi][lu_frameno]["kc"] )
 
     def DecodeBursts( self, frameno, kc ):
         max= sys.maxint
@@ -141,6 +107,7 @@ class capturedecode(object):
                     result= file
 
         if result:
+            print result
             c=gsmcrack(result)
 
             print "Decoded bursts", result
@@ -276,16 +243,24 @@ class gsmcrack(object):
         for burst in frame.xpath("burst"):
             out+= "--burst %s " % (burst.cyphertext.text.strip(),)
 
-        main_params= "./burst_decode -i 127.0.0.1 --ul %d --fn %d " % (int(frame.attrib["uplink"]), int(frame.xpath("burst")[0].attrib["fn"]),)
+        try:
+            main_params= "./burst_decode -i 127.0.0.1 --ul %d --fn %d -t %d " % (int(frame.attrib["uplink"]), int(frame.xpath("burst")[0].attrib["fn"]), int(frame.chan_type),)
+        except:
+            print "Error:", sys.exc_info()[0]
+            return None
+
+        main_params+= out
 
         if int(frame.attrib["cipher"])==1:
-            result= subprocess.check_output(main_params + out + " --kc " + kc, shell=True)
+            result= subprocess.check_output(main_params + " --kc " + kc, shell=True)
         else:
-            result= subprocess.check_output(main_params + out , shell=True)
+            result= subprocess.check_output(main_params , shell=True)
 
         result= re.search("RAW\sDATA:\s+([0-9abcdef ]+)", result)
         if result:
             return result.group(1)
+
+        print "Error decoding", main_params, "with kc", kc
 
         return None
 

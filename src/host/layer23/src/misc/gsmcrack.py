@@ -341,4 +341,10 @@ class gsmcrack(object):
 
 if __name__ == "__main__":
     a=gsmcrack(sys.argv[1], "localhost", 5555)
-    print "KC:", a.CrackData(sys.argv[2])
+    KC= sys.argv[2]
+    print "KC:", KC
+
+    if KC:
+        print "Decoding data..."
+        a.DecodeData(KC)
+

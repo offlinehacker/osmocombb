@@ -15,6 +15,8 @@ from binascii import *
 from card.utils import *
 from card.SIM import SIM
 
+from time import sleep
+
 class capturedecode(object):
     def SmartCardGetKcFromRand(self, rand, pin=None):
 	s= SIM()
@@ -293,7 +295,12 @@ class gsmcrack(object):
         print "Running kraken for keystream", keystream
 
         tn= telnetlib.Telnet(self.kraken_ip, self.kraken_port)
-        tn.write("crack %s\r\n" % keystream)
+
+        try:
+            sleep(2)
+            tn.write("crack %s\r\n" % keystream)
+        except:
+            return []
 
         id= -1
         result=[]

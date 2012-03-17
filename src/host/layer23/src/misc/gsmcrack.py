@@ -14,6 +14,7 @@ from io import FileIO
 from binascii import *
 from card.utils import *
 from card.SIM import SIM
+from jinja2 import Template
 
 from time import sleep
 
@@ -171,8 +172,10 @@ class gsmcrack(object):
         print "Cracking %d encripted frames." % (len(frames),)
 
         with open(PredictFile) as f:
-                content = f.readlines()
-                print "We are guessing:\n", "".join(content)
+                fcontent = "".join( f.readlines() )
+                template = Template(fcontent)
+                content= template.render(os.environ).split("\n")
+                print "We are guessing:\n", "\n".join(content)
 
                 for (i,line) in enumerate(content):
                     print "Trying frame no %d" % (i,)
@@ -347,4 +350,3 @@ if __name__ == "__main__":
     if KC:
         print "Decoding data..."
         a.DecodeData(KC)
-

@@ -572,6 +572,7 @@ local_burst_decode(struct l1ctl_burst_ind *bi)
 				chan_type,
 				bi->flags & BI_FLG_SACCH ? 0x40 : 0x00
 			);
+			LOGP(DRR, LOGL_NOTICE, "Burst data\n");
 			gsmtap_send(gsmtap_inst,
 				arfcn, chan_ts, gsmtap_chan_type, chan_ss,
 				ntohl(bi->frame_nr), bi->rx_level, bi->snr,
@@ -582,6 +583,8 @@ local_burst_decode(struct l1ctl_burst_ind *bi)
 			if ((l2[3] == 0x06) && (l2[4] == 0x35) && (l2[5] & 1))
 				app_state.dch_ciph = 1 + ((l2[5] >> 1) & 7);
 		}
+		else
+			LOGP(DRR, LOGL_NOTICE, "Error decoding data, data encripted?\n");
 	}
 }
 
@@ -611,7 +614,8 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 	struct l1ctl_burst_ind *bi;
 	int16_t rx_dbm;
 	uint16_t arfcn;
-	int ul, do_rel=0;
+	int ul, do_rel=0, i;
+	ubit_t bt[116];
 
 	/* Header handling */
 	bi = (struct l1ctl_burst_ind *) msg->l1h;
@@ -674,8 +678,26 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 	}
 
 	/* Save the burst */
+	//if (app_state.dch_state == DCH_ACTIVE)
+	//	fwrite(bi, sizeof(*bi), 1, app_state.fh);
+
+	/* Save the burst to airprobe format */
 	if (app_state.dch_state == DCH_ACTIVE)
-		fwrite(bi, sizeof(*bi), 1, app_state.fh);
+	{
+	    fprintf( app_state.fh, "%d ", ntohl(bi->frame_nr));
+
+	    /* Unpack (ignore hu/hl) */
+	    osmo_pbit2ubit_ext(bt,  0, bi->bits,  0, 57, 0);
+	    osmo_pbit2ubit_ext(bt, 59, bi->bits, 57, 57, 0);
+	    bt[57] = bt[58] = 1;
+
+	    for (i=0; i<57; i++)
+		fprintf( app_state.fh, "%d", bt[i] );
+	    for (i=59; i<116; i++)
+		fprintf( app_state.fh, "%d", bt[i] );
+
+	    fprintf( app_state.fh, "\n" );
+	}
 
 	/* Try local decoding */
 	if (app_state.dch_state == DCH_ACTIVE)
@@ -734,7 +756,7 @@ int l23_app_init(struct osmocom_ms *ms)
 
 static int l23_cfg_supported()
 {
-	return L23_OPT_TAP | L23_OPT_DBG;
+	return L23_OPT_TAP | L23_OPT_DBG | L23_OPT_ARFCN;
 }
 
 static int l23_getopt_options(struct option **options)

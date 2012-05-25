@@ -161,6 +161,8 @@ struct dnload {
 
 	struct tool_server layer2_server;
 	struct tool_server loader_server;
+
+    int CP210x;
 };
 
 
@@ -226,12 +228,16 @@ int serial_up_to_eleven(void)
 	if (rv == 0)
 		return 0;
 
-#ifdef I_HAVE_A_CP210x /* and I know what I'm doing, I swear ! */
-	/* Try closest standard baudrate (CP210x reprogrammed adapters) */
-	rv = osmo_serial_set_baudrate(dnload.serial_fd.fd, B460800);
-	if (rv == 0)
-		return 0;
-#endif
+    if(dnload.CP210x)
+    {
+        /* Try closest standard baudrate (CP210x reprogrammed adapters) */
+        rv = osmo_serial_set_baudrate(dnload.serial_fd.fd, B460800);
+        if (rv == 0)
+        {
+            fprintf(stdout, "Non standard baud rate set\n");
+            return 0;
+        }
+    }
 
 	/* Everything failed */
 	fprintf(stderr, "!!!\n");
@@ -851,7 +857,7 @@ static int handle_read(void)
 			dnload.filename = dnload.chainload_filename;
 			dnload.previous_mode = dnload.mode;
 			dnload.mode = MODE_ROMLOAD;
-			osmo_serial_set_baudrate(dnload.serial_fd.fd, ROMLOAD_INIT_BAUDRATE);
+		    osmo_serial_set_baudrate(dnload.serial_fd.fd, ROMLOAD_INIT_BAUDRATE);
 			tick_timer.cb = &beacon_timer_cb;
 			tick_timer.data = &tick_timer;
 			osmo_timer_schedule(&tick_timer, 0, dnload.beacon_interval);
@@ -1226,6 +1232,7 @@ static int parse_mode(const char *arg)
 	"\t\t [ -m {c123,c123xor,c140,c140xor,c155,romload,mtk} ]\n" \
 	"\t\t [ -c /to-be-chainloaded-file.bin ]\n" \
 	"\t\t [ -i beacon-interval (mS) ]\n" \
+    "\t\t [ -f fix if you have CP210x ]\n" \
 	"\t\t  file.bin\n\n" \
 	"* Open serial port /dev/ttyXXXX (connected to your phone)\n" \
 	"* Perform handshaking with the ramloader in the phone\n" \
@@ -1438,7 +1445,9 @@ int main(int argc, char **argv)
 	dnload.previous_filename = NULL;
 	dnload.beacon_interval = DEFAULT_BEACON_INTERVAL;
 
-	while ((opt = getopt(argc, argv, "d:hl:p:m:c:s:i:v")) != -1) {
+    dnload.CP210x= 0;
+
+	while ((opt = getopt(argc, argv, "d:hl:p:m:c:s:i:v:f:")) != -1) {
 		switch (opt) {
 		case 'p':
 			serial_dev = optarg;
@@ -1466,6 +1475,9 @@ int main(int argc, char **argv)
 		case 'i':
 			dnload.beacon_interval = atoi(optarg) * 1000;
 			break;
+        case 'f':
+            dnload.CP210x= 1;
+            break;
 		case 'h':
 		default:
 			usage(argv[0]);

@@ -374,49 +374,49 @@ static int gsm48_rx_paging_p1(struct msgb *msg, struct osmocom_ms *ms)
 	}
 
 	if (mi_type != GSM_MI_TYPE_NONE) {
-		gsm48_mi_to_string(mi_string, sizeof(mi_string), &pag->data[1], len1);
-		LOGP(DRR, LOGL_NOTICE, "Paging1: %s chan %s to %s M(%s) \n",
-		     pag_print_mode(pag->pag_mode),
-		     chan_need(pag->cneed1),
-		     mi_type_to_string(mi_type),
-		     mi_string);
-        mi_found(&pag->data[1], len1);
-	}
+    gsm48_mi_to_string(mi_string, sizeof(mi_string), &pag->data[1], len1);
+    LOGP(DRR, LOGL_NOTICE, "Paging1: %s chan %s to %s M(%s) \n",
+            pag_print_mode(pag->pag_mode),
+            chan_need(pag->cneed1),
+            mi_type_to_string(mi_type),
+            mi_string);
+    mi_found(&pag->data[1], len1);
+}
 
-	/* check if we have a MI type in here */
-	if (msgb_l3len(msg) < sizeof(*pag) + 2 + len1 + 3)
-		return 0;
+/* check if we have a MI type in here */
+if (msgb_l3len(msg) < sizeof(*pag) + 2 + len1 + 3)
+    return 0;
 
-	tag = pag->data[2 + len1 + 0];
-	len2 = pag->data[2 + len1 + 1];
-	mi_type = pag->data[2 + len1 + 2] & GSM_MI_TYPE_MASK;
-	if (tag == GSM48_IE_MOBILE_ID && mi_type != GSM_MI_TYPE_NONE) {
-		if (msgb_l3len(msg) < sizeof(*pag) + 2 + len1 + 3 + len2) {
-			LOGP(DRR, LOGL_ERROR, "Optional MI does not fit here.\n");
-			return -1;
-		}
+tag = pag->data[2 + len1 + 0];
+len2 = pag->data[2 + len1 + 1];
+mi_type = pag->data[2 + len1 + 2] & GSM_MI_TYPE_MASK;
+if (tag == GSM48_IE_MOBILE_ID && mi_type != GSM_MI_TYPE_NONE) {
+    if (msgb_l3len(msg) < sizeof(*pag) + 2 + len1 + 3 + len2) {
+        LOGP(DRR, LOGL_ERROR, "Optional MI does not fit here.\n");
+        return -1;
+    }
 
-		gsm48_mi_to_string(mi_string, sizeof(mi_string), &pag->data[2 + len1 + 2], len2);
-		LOGP(DRR, LOGL_NOTICE, "Paging2: %s chan %s to %s M(%s) \n",
-		     pag_print_mode(pag->pag_mode),
-		     chan_need(pag->cneed2),
-		     mi_type_to_string(mi_type),
-		     mi_string);
-        mi_found(&pag->data[2+len1+2], len2);
-	}
-	return 0;
+    gsm48_mi_to_string(mi_string, sizeof(mi_string), &pag->data[2 + len1 + 2], len2);
+    LOGP(DRR, LOGL_NOTICE, "Paging2: %s chan %s to %s M(%s) \n",
+            pag_print_mode(pag->pag_mode),
+            chan_need(pag->cneed2),
+            mi_type_to_string(mi_type),
+            mi_string);
+    mi_found(&pag->data[2+len1+2], len2);
+}
+return 0;
 }
 
 static int gsm48_rx_paging_p2(struct msgb *msg, struct osmocom_ms *ms)
 {
-	struct gsm48_paging2 *pag;
-	int tag, len, mi_type;
-	char mi_string[GSM48_MI_SIZE];
+    struct gsm48_paging2 *pag;
+    int tag, len, mi_type;
+    char mi_string[GSM48_MI_SIZE];
 
-	if (msgb_l3len(msg) < sizeof(*pag)) {
-		LOGP(DRR, LOGL_ERROR, "Paging2 message is too small.\n");
-		return -1;
-	}
+    if (msgb_l3len(msg) < sizeof(*pag)) {
+        LOGP(DRR, LOGL_ERROR, "Paging2 message is too small.\n");
+        return -1;
+    }
 
 	pag = msgb_l3(msg);
 	LOGP(DRR, LOGL_NOTICE, "Paging1: %s chan %s to TMSI M(0x%x) \n",
@@ -433,61 +433,62 @@ static int gsm48_rx_paging_p2(struct msgb *msg, struct osmocom_ms *ms)
 	if (msgb_l3len(msg) < sizeof(*pag) + 3)
 		return 0;
 
-	tag = pag->data[0];
-	len = pag->data[1];
-	mi_type = pag->data[2] & GSM_MI_TYPE_MASK;
+    tag = pag->data[0];
+    len = pag->data[1];
+    mi_type = pag->data[2] & GSM_MI_TYPE_MASK;
 
-	if (tag != GSM48_IE_MOBILE_ID)
-		return 0;
+    if (tag != GSM48_IE_MOBILE_ID)
+        return 0;
 
-	if (msgb_l3len(msg) < sizeof(*pag) + 3 + len) {
-		LOGP(DRR, LOGL_ERROR, "Optional MI does not fit in here\n");
-		return -1;
-	}
+    if (msgb_l3len(msg) < sizeof(*pag) + 3 + len) {
+        LOGP(DRR, LOGL_ERROR, "Optional MI does not fit in here\n");
+        return -1;
+    }
 
-	gsm48_mi_to_string(mi_string, sizeof(mi_string), &pag->data[2], len);
-	LOGP(DRR, LOGL_NOTICE, "Paging3: %s chan %s to %s M(%s) \n",
-	     pag_print_mode(pag->pag_mode),
-	     "n/a ",
-	     mi_type_to_string(mi_type),
-	     mi_string);
+    gsm48_mi_to_string(mi_string, sizeof(mi_string), &pag->data[2], len);
+    LOGP(DRR, LOGL_NOTICE, "Paging3: %s chan %s to %s M(%s) \n",
+            pag_print_mode(pag->pag_mode),
+            "n/a ",
+            mi_type_to_string(mi_type),
+            mi_string);
     mi_found(&pag->data[2],len);
 
-	return 0;
+    return 0;
 }
 
 static int gsm48_rx_paging_p3(struct msgb *msg, struct osmocom_ms *ms)
 {
-	struct gsm48_paging3 *pag;
+struct gsm48_paging3 *pag;
 
-	if (msgb_l3len(msg) < sizeof(*pag)) {
-		LOGP(DRR, LOGL_ERROR, "Paging3 message is too small.\n");
-		return -1;
-	}
+if (msgb_l3len(msg) < sizeof(*pag)) {
+    LOGP(DRR, LOGL_ERROR, "Paging3 message is too small.\n");
+    return -1;
+}
 
-	pag = msgb_l3(msg);
-	LOGP(DRR, LOGL_NOTICE, "Paging1: %s chan %s to TMSI M(0x%x) \n",
-		     pag_print_mode(pag->pag_mode),
-		     chan_need(pag->cneed1), pag->tmsi1);
-    mi_found(&pag->tmsi1,4);
-	LOGP(DRR, LOGL_NOTICE, "Paging2: %s chan %s to TMSI M(0x%x) \n",
-		     pag_print_mode(pag->pag_mode),
-		     chan_need(pag->cneed2), pag->tmsi2);
-    mi_found(&pag->tmsi2,4);
-	LOGP(DRR, LOGL_NOTICE, "Paging3: %s chan %s to TMSI M(0x%x) \n",
-		     pag_print_mode(pag->pag_mode),
-		     "n/a ", pag->tmsi3);
-    mi_found(&pag->tmsi3,4);
-	LOGP(DRR, LOGL_NOTICE, "Paging4: %s chan %s to TMSI M(0x%x) \n",
-		     pag_print_mode(pag->pag_mode),
-		     "n/a ", pag->tmsi4);
-    mi_found(&pag->tmsi4,4);
+pag = msgb_l3(msg);
+LOGP(DRR, LOGL_NOTICE, "Paging1: %s chan %s to TMSI M(0x%x) \n",
+            pag_print_mode(pag->pag_mode),
+            chan_need(pag->cneed1), pag->tmsi1);
+mi_found(&pag->tmsi1,4);
+LOGP(DRR, LOGL_NOTICE, "Paging2: %s chan %s to TMSI M(0x%x) \n",
+            pag_print_mode(pag->pag_mode),
+            chan_need(pag->cneed2), pag->tmsi2);
+mi_found(&pag->tmsi2,4);
+LOGP(DRR, LOGL_NOTICE, "Paging3: %s chan %s to TMSI M(0x%x) \n",
+            pag_print_mode(pag->pag_mode),
+            "n/a ", pag->tmsi3);
+mi_found(&pag->tmsi3,4);
+LOGP(DRR, LOGL_NOTICE, "Paging4: %s chan %s to TMSI M(0x%x) \n",
+            pag_print_mode(pag->pag_mode),
+            "n/a ", pag->tmsi4);
+mi_found(&pag->tmsi4,4);
 
-	return 0;
+return 0;
 }
 
 int gsm48_rx_ccch(struct msgb *msg, struct osmocom_ms *ms)
 {
+<<<<<<< HEAD
 	struct gsm48_system_information_type_header *sih = msgb_l3(msg);
 	int rc = 0;
 
@@ -522,105 +523,141 @@ int gsm48_rx_ccch(struct msgb *msg, struct osmocom_ms *ms)
 			sih->system_information);
 		rc = -EINVAL;
 	}
+=======
+struct gsm48_system_information_type_header *sih = msgb_l3(msg);
+int rc = 0;
 
-	return rc;
+/* CCCH marks the end of WAIT_REL */
+if (app_state.dch_state == DCH_WAIT_REL)
+    app_state.dch_state = DCH_NONE;
+
+if (sih->rr_protocol_discriminator != GSM48_PDISC_RR)
+    LOGP(DRR, LOGL_ERROR, "PCH pdisc != RR\n");
+
+switch (sih->system_information) {
+case GSM48_MT_RR_PAG_REQ_1:
+    gsm48_rx_paging_p1(msg, ms);
+    break;
+case GSM48_MT_RR_PAG_REQ_2:
+    gsm48_rx_paging_p2(msg, ms);
+    break;
+case GSM48_MT_RR_PAG_REQ_3:
+    gsm48_rx_paging_p3(msg, ms);
+    break;
+case GSM48_MT_RR_IMM_ASS:
+    gsm48_rx_imm_ass(msg, ms);
+    break;
+case GSM48_MT_RR_NOTIF_NCH:
+    /* notification for voice call groups and such */
+    break;
+case 0x07:
+    /* wireshark know that this is SI2 quater and for 3G interop */
+    break;
+default:
+    LOGP(DRR, LOGL_NOTICE, "unknown PCH/AGCH type 0x%02x\n",
+        sih->system_information);
+    rc = -EINVAL;
+}
+>>>>>>> 1d8ee2a... Finished gsmcrack.py, fixed app_ccch_scan and added sample prediction
+
+return rc;
 }
 
 int gsm48_rx_bcch(struct msgb *msg, struct osmocom_ms *ms)
 {
-	/* BCCH marks the end of WAIT_REL */
-	if (app_state.dch_state == DCH_WAIT_REL)
-		app_state.dch_state = DCH_NONE;
+/* BCCH marks the end of WAIT_REL */
+if (app_state.dch_state == DCH_WAIT_REL)
+    app_state.dch_state = DCH_NONE;
 
-	/* FIXME: we have lost the gsm frame time until here, need to store it
-	 * in some msgb context */
-	//dump_bcch(dl->time.tc, ccch->data);
-	dump_bcch(ms, 0, msg->l3h);
+/* FIXME: we have lost the gsm frame time until here, need to store it
+    * in some msgb context */
+//dump_bcch(dl->time.tc, ccch->data);
+dump_bcch(ms, 0, msg->l3h);
 
-	return 0;
+return 0;
 }
 
 int gsm48_rx_sdcch(struct msgb *msg, struct osmocom_ms *ms){
-    struct gsm48_hdr *hdr = msgb_l3(msg);
+struct gsm48_hdr *hdr = msgb_l3(msg);
 
-    LOGP(DRR, LOGL_NOTICE, "Here\n");
+LOGP(DRR, LOGL_NOTICE, "Here\n");
 
-    /* We are looking for paging response messages */
-    if(hdr->proto_discr!=GSM48_PDISC_RR && hdr->msg_type!=GSM48_MT_RR_PAG_RESP)
-        return 0;
-
-    LOGP(DRR, LOGL_NOTICE, "Paging response detected :)\n");
-
+/* We are looking for paging response messages */
+if(hdr->proto_discr!=GSM48_PDISC_RR && hdr->msg_type!=GSM48_MT_RR_PAG_RESP)
     return 0;
+
+LOGP(DRR, LOGL_NOTICE, "Paging response detected :)\n");
+
+return 0;
 }
 
 static void
 local_burst_decode(struct l1ctl_burst_ind *bi)
 {
-	int16_t rx_dbm;
-	uint16_t arfcn;
-	uint32_t fn;
-	uint8_t cbits, tn, lch_idx;
-	int ul, bid, i, j;
-	sbit_t *bursts;
-	ubit_t bt[116];
+    int16_t rx_dbm;
+    uint16_t arfcn;
+    uint32_t fn;
+    uint8_t cbits, tn, lch_idx;
+    int ul, bid, i, j;
+    sbit_t *bursts;
+    ubit_t bt[116];
 
-	/* Get params (Only for SDCCH and SACCH/{4,8,F,H}) */
-	arfcn  = ntohs(bi->band_arfcn);
-	rx_dbm = rxlev2dbm(bi->rx_level);
+    /* Get params (Only for SDCCH and SACCH/{4,8,F,H}) */
+    arfcn  = ntohs(bi->band_arfcn);
+    rx_dbm = rxlev2dbm(bi->rx_level);
 
-	fn     = ntohl(bi->frame_nr);
-	ul     = !!(arfcn & ARFCN_UPLINK);
-	bursts = ul ? app_state.bursts_ul : app_state.bursts_dl;
+    fn     = ntohl(bi->frame_nr);
+    ul     = !!(arfcn & ARFCN_UPLINK);
+    bursts = ul ? app_state.bursts_ul : app_state.bursts_dl;
 
-	cbits  = bi->chan_nr >> 3;
-	tn     = bi->chan_nr & 7;
+    cbits  = bi->chan_nr >> 3;
+    tn     = bi->chan_nr & 7;
 
-	bid    = -1;
+    bid    = -1;
 
-	if (cbits == 0x01) {			/* TCH/F */
-		lch_idx = 0;
-		if (bi->flags & BI_FLG_SACCH) {
-			uint32_t fn_report;
-			fn_report = (fn - (tn * 13) + 104) % 104;
-			bid = (fn_report - 12) / 26;
-		}
-	} else if ((cbits & 0x1e) == 0x02) {	/* TCH/H */
-		lch_idx = cbits & 1;
-		if (bi->flags & BI_FLG_SACCH) {
-			uint32_t fn_report;
-			uint8_t tn_report = (tn & ~1) | lch_idx;
-			fn_report = (fn - (tn_report * 13) + 104) % 104;
-			bid = (fn_report - 12) / 26;
-		}
-	} else if ((cbits & 0x1c) == 0x04) {	/* SDCCH/4 */
-		lch_idx = cbits & 3;
-		bid = bi->flags & 3;
-	} else if ((cbits & 0x18) == 0x08) {	/* SDCCH/8 */
-		lch_idx = cbits & 7;
-		bid = bi->flags & 3;
-	}
-
-	if (bid == -1)
-		return;
-
-	/* Clear if new set */
-	if (bid == 0)
-    {
-		memset(bursts, 0x00, 116 * 4);
-        fprintf(app_state.fh, "<frame uplink=\"%d\">\n", ul?1:0);
+    if (cbits == 0x01) {			/* TCH/F */
+        lch_idx = 0;
+        if (bi->flags & BI_FLG_SACCH) {
+            uint32_t fn_report;
+            fn_report = (fn - (tn * 13) + 104) % 104;
+            bid = (fn_report - 12) / 26;
+        }
+    } else if ((cbits & 0x1e) == 0x02) {	/* TCH/H */
+        lch_idx = cbits & 1;
+        if (bi->flags & BI_FLG_SACCH) {
+            uint32_t fn_report;
+            uint8_t tn_report = (tn & ~1) | lch_idx;
+            fn_report = (fn - (tn_report * 13) + 104) % 104;
+            bid = (fn_report - 12) / 26;
+        }
+    } else if ((cbits & 0x1c) == 0x04) {	/* SDCCH/4 */
+        lch_idx = cbits & 3;
+        bid = bi->flags & 3;
+    } else if ((cbits & 0x18) == 0x08) {	/* SDCCH/8 */
+        lch_idx = cbits & 7;
+        bid = bi->flags & 3;
     }
 
-	/* Unpack (ignore hu/hl) */
-	osmo_pbit2ubit_ext(bt,  0, bi->bits,  0, 57, 0);
-	osmo_pbit2ubit_ext(bt, 59, bi->bits, 57, 57, 0);
-	bt[57] = bt[58] = 1;
+    if (bid == -1)
+        return;
+
+    /* Clear if new set */
+    if (bid == 0)
+    {
+        memset(bursts, 0x00, 116 * 4);
+        fprintf(app_state.fh, "<frame uplink=\"%d\" cipher=\"%d\">\n", ul?1:0, app_state.dch_ciph);
+    }
+
+    /* Unpack (ignore hu/hl) */
+    osmo_pbit2ubit_ext(bt,  0, bi->bits,  0, 57, 0);
+    osmo_pbit2ubit_ext(bt, 59, bi->bits, 57, 57, 0);
+    bt[57] = bt[58] = 1;
 
     /* Bursts in xml readable format */
     if(app_state.xml) {
         fprintf(app_state.fh, "<burst fn=\"%d\">\n", ntohl(bi->frame_nr));
 
-        fprintf(app_state.fh, "<cyphetext>\n");
+        fprintf(app_state.fh, "<cyphertext>\n");
         for (i=0; i<57; i++)
             fprintf( app_state.fh, "%d", bt[i] );
         for (i=59; i<116; i++)
@@ -628,12 +665,12 @@ local_burst_decode(struct l1ctl_burst_ind *bi)
         fprintf( app_state.fh, "\n</cyphertext>\n" );
     }
 
-	/* A5/x */
-	if (app_state.dch_ciph && app_state.kc[0]!=0 && app_state.kc[1]!=0) {
-		ubit_t ks_dl[114], ks_ul[114], *ks = ul ? ks_ul : ks_dl;
-		osmo_a5(app_state.dch_ciph, app_state.kc, fn, ks_dl, ks_ul);
-		for (i= 0; i< 57; i++)  bt[i] ^= ks[i];
-		for (i=59; i<116; i++)  bt[i] ^= ks[i-2];
+    /* A5/x */
+    if (app_state.dch_ciph && app_state.kc[0]!=0 && app_state.kc[1]!=0) {
+        ubit_t ks_dl[114], ks_ul[114], *ks = ul ? ks_ul : ks_dl;
+        osmo_a5(app_state.dch_ciph, app_state.kc, fn, ks_dl, ks_ul);
+        for (i= 0; i< 57; i++)  bt[i] ^= ks[i];
+        for (i=59; i<116; i++)  bt[i] ^= ks[i-2];
 
         /* Keystream in xml readable format */
         if(app_state.xml) {
@@ -644,7 +681,7 @@ local_burst_decode(struct l1ctl_burst_ind *bi)
                 fprintf( app_state.fh, "%d", ks[i-2] );
             fprintf( app_state.fh, "\n</keystream>\n" );
         }
-	}
+    }
 
     /* Bursts in xml readable format */
     if(app_state.xml) {
@@ -656,29 +693,29 @@ local_burst_decode(struct l1ctl_burst_ind *bi)
         fprintf( app_state.fh, "\n</plaintext>\n</burst>" );
     }
 
-	/* Convert to softbits */
-	for (i=0; i<116; i++)
-		bursts[(116*bid)+i] = bt[i] ? - (bi->snr >> 1) : (bi->snr >> 1);
+    /* Convert to softbits */
+    for (i=0; i<116; i++)
+        bursts[(116*bid)+i] = bt[i] ? - (bi->snr >> 1) : (bi->snr >> 1);
 
-	/* If last, decode */
-	if (bid == 3)
-	{
-		uint8_t l2[23];
-		int rv;
+    /* If last, decode */
+    if (bid == 3)
+    {
+        uint8_t l2[23];
+        int rv;
         ubit_t raw_bursts[4][114];
-		rv = xcch_decode(l2, bursts);
+        rv = xcch_decode(l2, bursts);
 
-		if (rv == 0)
-		{
-			uint8_t chan_type, chan_ts, chan_ss;
-			uint8_t gsmtap_chan_type;
+        if (rv == 0)
+        {
+            uint8_t chan_type, chan_ts, chan_ss;
+            uint8_t gsmtap_chan_type;
 
             /* Data in xml readable format */
             if(app_state.xml) {
                 //Data dump
                 fprintf( app_state.fh,"<data>\n");
                 for  (i=0; i<23; i++)
-                    fprintf( app_state.fh, "%2x", l2[i]);
+                    fprintf( app_state.fh, "%02x", l2[i]);
                 fprintf( app_state.fh, "\n</data>\n");
 
                 //Error rate per burst
@@ -691,8 +728,7 @@ local_burst_decode(struct l1ctl_burst_ind *bi)
                         if(( bursts[i*116+j]>0 ? 0 : 1 )!=raw_bursts[i][j-2])
                             rv++;
                 }
-                fprintf( app_state.fh,"<error rate=\"%f\"/>\n", rv/(114.0*4.0));
-                fprintf( app_state.fh, "</frame>\n" );
+                fprintf( app_state.fh,"<error>%f</error>\n", rv/(114.0*4.0));
             }
 
 			/* Send to GSMTAP */
@@ -714,6 +750,9 @@ local_burst_decode(struct l1ctl_burst_ind *bi)
 		}
 		else
 			LOGP(DRR, LOGL_NOTICE, "Error decoding data, data encripted?\n");
+
+        if(app_state.xml)
+            fprintf( app_state.fh, "</frame>\n" );
 	}
 }
 
@@ -765,7 +804,7 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 				/* Open output */
 				app_state.fh = fopen(gen_filename(ms, bi), "wb");
                 if(app_state.xml)
-                        fprintf(app_state.fh, "<frame arfcn=\"%d\">\n", ms->test_arfcn);
+                        fprintf(app_state.fh, "<scan arfcn=\"%d\">\n", ms->test_arfcn);
 			} else {
 				/* Abandon ? */
 				do_rel = (app_state.dch_badcnt++) >= 4;
@@ -805,7 +844,7 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 		/* Close output */
 		if (app_state.fh) {
             if(app_state.xml)
-                fprintf(app_state.fh, "</frame>");
+                fprintf(app_state.fh, "</frame></scan>");
 			fclose(app_state.fh);
 			app_state.fh = NULL;
 		}

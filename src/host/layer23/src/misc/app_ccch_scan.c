@@ -78,9 +78,14 @@ static struct {
 	struct gsm_sysinfo_freq	cell_arfcns[1024];
 
 	uint8_t			kc[8];
-    uint8_t         tmsi[4];
+    char         tmsi[20];
     int             filter_tmsi;
     int             tmsi_found;
+
+    int output;
+    int follow;
+
+    struct timeval start, end;
 
     int xml;
 } app_state;
@@ -197,7 +202,6 @@ static void dump_bcch(struct osmocom_ms *ms, uint8_t tc, const uint8_t *data)
 	case GSM48_MT_RR_SYSINFO_5ter:
 		break;
 	default:
-		fprintf(stderr, "\tUnknown SI");
 		break;
 	};
 }
@@ -212,11 +216,23 @@ static int gsm48_rx_imm_ass(struct msgb *msg, struct osmocom_ms *ms)
 	struct gsm48_imm_ass *ia = msgb_l3(msg);
 	uint8_t ch_type, ch_subch, ch_ts;
 	int rv;
+    long seconds;
 
+    gettimeofday(&app_state.end, NULL);
+    seconds  = app_state.end.tv_sec  - app_state.start.tv_sec;
+
+    //printf("diff is %dl\n",seconds);
+    
     /* In case if we are filtering tmsi and tmsi has not been found do not
      * follow this asignment */
-    if(app_state.filter_tmsi && !app_state.tmsi_found )
+    if(app_state.filter_tmsi && !app_state.tmsi_found)
         return 0;
+
+    if(app_state.filter_tmsi && app_state.tmsi_found && seconds>10)
+    {
+        app_state.tmsi_found=0;
+        return 0;
+    }
 
     /* Reset info about found tmsi */
     app_state.tmsi_found= 0;
@@ -241,6 +257,9 @@ static int gsm48_rx_imm_ass(struct msgb *msg, struct osmocom_ms *ms)
 			"ARFCN=%u, TS=%u, SS=%u, TSC=%u) ", ia->req_ref.ra,
 			ia->chan_desc.chan_nr, arfcn, ch_ts, ch_subch,
 			ia->chan_desc.h0.tsc);
+
+        if(!app_state.follow)
+            return 0;
 
 		/* request L1 to go to dedicated mode on assigned channel */
 		rv = l1ctl_tx_dm_est_req_h0(ms,
@@ -272,6 +291,9 @@ static int gsm48_rx_imm_ass(struct msgb *msg, struct osmocom_ms *ms)
 				j++;
 			}
 		}
+
+        if(!app_state.follow)
+            return 0;
 
 		/* request L1 to go to dedicated mode on assigned channel */
 		rv = l1ctl_tx_dm_est_req_h1(ms,
@@ -340,11 +362,13 @@ static char *mi_type_to_string(int type)
 	}
 }
 
-static void mi_found(uint8_t *data, int len)
+static void mi_found(struct msgb *msg, char* tmsi, int len)
 {
-    if(len>=4 && app_state.filter_tmsi) {
-        if(memcmp(app_state.tmsi, data, 4)){
+    if(app_state.filter_tmsi) {
+        if(strstr(tmsi,app_state.tmsi)){
+            gettimeofday(&app_state.start, NULL);
             app_state.tmsi_found=1;
+            printf("found\n");
             LOGP(DRR, LOGL_ERROR, "TMSI has been found, is he becoming IMMASS?\n");
         }
     }
@@ -381,7 +405,7 @@ static int gsm48_rx_paging_p1(struct msgb *msg, struct osmocom_ms *ms)
             chan_need(pag->cneed1),
             mi_type_to_string(mi_type),
             mi_string);
-    mi_found(&pag->data[1], len1);
+    mi_found(msg, mi_string, len1);
 }
 
 /* check if we have a MI type in here */
@@ -403,7 +427,7 @@ if (tag == GSM48_IE_MOBILE_ID && mi_type != GSM_MI_TYPE_NONE) {
             chan_need(pag->cneed2),
             mi_type_to_string(mi_type),
             mi_string);
-    mi_found(&pag->data[2+len1+2], len2);
+    mi_found(msg, mi_string, len2);
 }
 return 0;
 }
@@ -423,12 +447,14 @@ static int gsm48_rx_paging_p2(struct msgb *msg, struct osmocom_ms *ms)
 	LOGP(DRR, LOGL_NOTICE, "Paging1: %s chan %s to TMSI M(0x%x) \n",
 		     pag_print_mode(pag->pag_mode),
 		     chan_need(pag->cneed1), pag->tmsi1);
-    mi_found(&pag->tmsi1,4);
+    sprintf(mi_string, "%u", pag->tmsi1);
+    mi_found(msg, mi_string, 4);
 	LOGP(DRR, LOGL_NOTICE, "Paging2: %s chan %s to TMSI M(0x%x) \n",
 		     pag_print_mode(pag->pag_mode),
 		     chan_need(pag->cneed2), pag->tmsi2);
 
-    mi_found(&pag->tmsi2,4);
+    sprintf(mi_string, "%u", pag->tmsi2);
+    mi_found(msg, mi_string,4);
 
 	/* no optional element */
 	if (msgb_l3len(msg) < sizeof(*pag) + 3)
@@ -452,7 +478,7 @@ static int gsm48_rx_paging_p2(struct msgb *msg, struct osmocom_ms *ms)
             "n/a ",
             mi_type_to_string(mi_type),
             mi_string);
-    mi_found(&pag->data[2],len);
+    mi_found(msg, mi_string,len);
 
     return 0;
 }
@@ -460,6 +486,7 @@ static int gsm48_rx_paging_p2(struct msgb *msg, struct osmocom_ms *ms)
 static int gsm48_rx_paging_p3(struct msgb *msg, struct osmocom_ms *ms)
 {
 struct gsm48_paging3 *pag;
+char mi_string[GSM48_MI_SIZE];
 
 if (msgb_l3len(msg) < sizeof(*pag)) {
     LOGP(DRR, LOGL_ERROR, "Paging3 message is too small.\n");
@@ -470,26 +497,30 @@ pag = msgb_l3(msg);
 LOGP(DRR, LOGL_NOTICE, "Paging1: %s chan %s to TMSI M(0x%x) \n",
             pag_print_mode(pag->pag_mode),
             chan_need(pag->cneed1), pag->tmsi1);
-mi_found(&pag->tmsi1,4);
+sprintf(mi_string, "%u", pag->tmsi1);
+mi_found(msg, mi_string,4);
 LOGP(DRR, LOGL_NOTICE, "Paging2: %s chan %s to TMSI M(0x%x) \n",
             pag_print_mode(pag->pag_mode),
             chan_need(pag->cneed2), pag->tmsi2);
-mi_found(&pag->tmsi2,4);
+sprintf(mi_string, "%u", pag->tmsi2);
+mi_found(msg, mi_string,4);
 LOGP(DRR, LOGL_NOTICE, "Paging3: %s chan %s to TMSI M(0x%x) \n",
             pag_print_mode(pag->pag_mode),
             "n/a ", pag->tmsi3);
-mi_found(&pag->tmsi3,4);
+sprintf(mi_string, "%u", pag->tmsi3);
+mi_found(msg, mi_string,4);
 LOGP(DRR, LOGL_NOTICE, "Paging4: %s chan %s to TMSI M(0x%x) \n",
             pag_print_mode(pag->pag_mode),
             "n/a ", pag->tmsi4);
-mi_found(&pag->tmsi4,4);
+sprintf(mi_string, "%u", pag->tmsi2);
+mi_found(msg, mi_string,4);
 
 return 0;
 }
 
 int gsm48_rx_ccch(struct msgb *msg, struct osmocom_ms *ms)
 {
-<<<<<<< HEAD
+
 	struct gsm48_system_information_type_header *sih = msgb_l3(msg);
 	int rc = 0;
 
@@ -524,44 +555,8 @@ int gsm48_rx_ccch(struct msgb *msg, struct osmocom_ms *ms)
 			sih->system_information);
 		rc = -EINVAL;
 	}
-=======
-struct gsm48_system_information_type_header *sih = msgb_l3(msg);
-int rc = 0;
 
-/* CCCH marks the end of WAIT_REL */
-if (app_state.dch_state == DCH_WAIT_REL)
-    app_state.dch_state = DCH_NONE;
-
-if (sih->rr_protocol_discriminator != GSM48_PDISC_RR)
-    LOGP(DRR, LOGL_ERROR, "PCH pdisc != RR\n");
-
-switch (sih->system_information) {
-case GSM48_MT_RR_PAG_REQ_1:
-    gsm48_rx_paging_p1(msg, ms);
-    break;
-case GSM48_MT_RR_PAG_REQ_2:
-    gsm48_rx_paging_p2(msg, ms);
-    break;
-case GSM48_MT_RR_PAG_REQ_3:
-    gsm48_rx_paging_p3(msg, ms);
-    break;
-case GSM48_MT_RR_IMM_ASS:
-    gsm48_rx_imm_ass(msg, ms);
-    break;
-case GSM48_MT_RR_NOTIF_NCH:
-    /* notification for voice call groups and such */
-    break;
-case 0x07:
-    /* wireshark know that this is SI2 quater and for 3G interop */
-    break;
-default:
-    LOGP(DRR, LOGL_NOTICE, "unknown PCH/AGCH type 0x%02x\n",
-        sih->system_information);
-    rc = -EINVAL;
-}
->>>>>>> 1d8ee2a... Finished gsmcrack.py, fixed app_ccch_scan and added sample prediction
-
-return rc;
+    return rc;
 }
 
 int gsm48_rx_bcch(struct msgb *msg, struct osmocom_ms *ms)
@@ -646,7 +641,8 @@ local_burst_decode(struct l1ctl_burst_ind *bi)
     if (bid == 0)
     {
         memset(bursts, 0x00, 116 * 4);
-        fprintf(app_state.fh, "<frame uplink=\"%d\" cipher=\"%d\">\n", ul?1:0, app_state.dch_ciph);
+        if(app_state.xml)
+            fprintf(app_state.fh, "<frame uplink=\"%d\" cipher=\"%d\">\n", ul?1:0, app_state.dch_ciph);
     }
 
     /* Unpack (ignore hu/hl) */
@@ -778,14 +774,25 @@ gen_filename(struct osmocom_ms *ms, struct l1ctl_burst_ind *bi)
 	time(&d);
 	localtime_r(&d, &lt);
 
-	snprintf(buffer, 256, "bursts_%04d%02d%02d_%02d%02d_%d_%d_%02x_%s.dat",
+/*	snprintf(buffer, 256, "bursts_%04d%02d%02d_%02d%02d_%d_%d_%02x_%s.dat",
 		lt.tm_year + 1900, lt.tm_mon, lt.tm_mday,
 		lt.tm_hour, lt.tm_min,
 		ms->test_arfcn,
 		ntohl(bi->frame_nr),
 		bi->chan_nr,
         osmo_osmo_hexdump_nospc(app_state.kc,8)
+	);*/
+
+    printf("bi: %x\n", bi);
+
+	snprintf(buffer, 256, "bursts_%04d%02d%02d_%02d%02d_%d_%d_%02x.dat",
+		lt.tm_year + 1900, lt.tm_mon, lt.tm_mday,
+		lt.tm_hour, lt.tm_min,
+		ms->test_arfcn,
+		ntohl(bi->frame_nr),
+		bi->chan_nr
 	);
+    printf("filegen complete\n");
 
 	return buffer;
 }
@@ -813,10 +820,14 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 				app_state.dch_state = DCH_ACTIVE;
 				app_state.dch_badcnt = 0;
 
+                printf("here11\n");
 				/* Open output */
-				app_state.fh = fopen(gen_filename(ms, bi), "wb");
+                if(app_state.output)
+    				app_state.fh = fopen(gen_filename(ms, bi), "wb");
+                printf("here22\n");
                 if(app_state.xml)
                         fprintf(app_state.fh, "<scan arfcn=\"%d\">\n", ms->test_arfcn);
+                printf("here4\n");
 			} else {
 				/* Abandon ? */
 				do_rel = (app_state.dch_badcnt++) >= 4;
@@ -826,6 +837,7 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 
 	/* Check for channel end */
 	if (app_state.dch_state == DCH_ACTIVE) {
+        printf("here3\n");
 		if (!ul) {
 			/* Bad burst counting */
 			if (bi->snr < 64)
@@ -842,6 +854,7 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 
 	/* Release ? */
 	if (do_rel) {
+        printf("here2\n");
 		/* L1 release */
 		l1ctl_tx_dm_rel_req(ms);
 		l1ctl_tx_fbsb_req(ms, ms->test_arfcn,
@@ -863,12 +876,20 @@ void layer3_rx_burst(struct osmocom_ms *ms, struct msgb *msg)
 	}
 
 	/* Save the burst */
-	if (app_state.dch_state == DCH_ACTIVE && !app_state.xml)
+	if (app_state.dch_state == DCH_ACTIVE && !app_state.xml && app_state.output)
+    {
+        printf("here1\n");
 	    fwrite(bi, sizeof(*bi), 1, app_state.fh);
+    }
 
+    //printf("here\n");
 	/* Try local decoding */
 	if (app_state.dch_state == DCH_ACTIVE)
+    {
+        printf("here\n");
 		local_burst_decode(bi);
+    }
+
 }
 
 void layer3_app_reset(void)
@@ -880,6 +901,11 @@ void layer3_app_reset(void)
 	app_state.dch_badcnt = 0;
 	app_state.dch_ciph = 0;
     app_state.tmsi_found= 0;
+    gettimeofday(&app_state.start, NULL);
+    gettimeofday(&app_state.end, NULL);
+
+    if(!app_state.output)
+        app_state.xml= 0;
 
 	if (app_state.fh)
 		fclose(app_state.fh);
@@ -894,6 +920,8 @@ static int signal_cb(unsigned int subsys, unsigned int signal,
 	struct osmocom_ms *ms;
 	struct osmobb_msg_ind *mi;
 
+	struct l1ctl_burst_ind *bi;
+
 	if (subsys != SS_L1CTL)
 		return 0;
 
@@ -901,6 +929,8 @@ static int signal_cb(unsigned int subsys, unsigned int signal,
 	case S_L1CTL_BURST_IND:
 		mi = signal_data;
 		layer3_rx_burst(mi->ms, mi->msg);
+    	/* Header handling */
+	    bi = (struct l1ctl_burst_ind *) mi->msg->l1h;
 		break;
 
 	case S_L1CTL_RESET:
@@ -942,8 +972,10 @@ static int l23_cfg_print_help()
 {
 	printf("\nApplication specific\n");
 	printf("  -k --kc    KEY        Key to use to try to decipher DCCHs\n");
-    printf("  -m --xml xml      Write bursts in xml redable format\n");
+    printf("  -m --xml   xml        Write bursts in xml redable format\n");
     printf("  -t --tmsi  TMSI       Tmsi we want to sniff data, ignore everyone else\n");
+    printf("  -o --output OUTPUT    Should we output data or not\n");
+    printf("  -f --follow FOLLOW    Should we follow immidiate assignemnts\n");
 
 	return 0;
 }
@@ -958,13 +990,17 @@ static int l23_cfg_handle(int c, const char *optarg)
 		}
 		break;
     case 't':
-        if (osmo_hexparse(optarg, app_state.tmsi,4) != 4) {
-			fprintf(stderr, "Invalid TMSI\n");
-			exit(-1);
-        }
+        strcpy(app_state.tmsi, optarg);
         app_state.filter_tmsi= 1;
+        break;
     case 'm':
         app_state.xml= 1;
+    case 'o':
+        app_state.output= 1;
+        break;
+    case 'f':
+        app_state.follow= 1;
+        break;
 	default:
 		return -1;
 	}
@@ -974,7 +1010,7 @@ static int l23_cfg_handle(int c, const char *optarg)
 static struct l23_app_info info = {
 	.copyright	= "Copyright (C) 2010 Harald Welte <laforge@gnumonks.org>\n",
 	.contribution	= "Contributions by Holger Hans Peter Freyther\n",
-	.getopt_string	= "k:m:t:",
+	.getopt_string	= "k:m:t:o:i:f:",
 	.cfg_supported	= l23_cfg_supported,
 	.cfg_getopt_opt = l23_getopt_options,
 	.cfg_handle_opt	= l23_cfg_handle,

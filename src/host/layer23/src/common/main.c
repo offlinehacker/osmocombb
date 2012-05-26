@@ -62,6 +62,7 @@ int (*l23_app_work) (struct osmocom_ms *ms) = NULL;
 int (*l23_app_exit) (struct osmocom_ms *ms) = NULL;
 int quit = 0;
 struct gsmtap_inst *gsmtap_inst;
+struct gsmtap_inst *gsmtap_our;
 
 const char *openbsc_copyright =
 	"%s"
@@ -271,6 +272,11 @@ int main(int argc, char **argv)
 			exit(1);
 		}
 		gsmtap_source_add_sink(gsmtap_inst);
+		gsmtap_our = gsmtap_source_init(gsmtap_ip, GSMTAP_UDP_PORT+1, 1);
+		if (!gsmtap_our) {
+			fprintf(stderr, "Failed during gsmtap_init()\n");
+			exit(1);
+		}
 	}
 
 	signal(SIGINT, sighandler);

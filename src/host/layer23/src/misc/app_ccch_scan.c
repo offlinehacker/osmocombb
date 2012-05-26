@@ -52,6 +52,7 @@
 #include <osmocom/bb/misc/xcch.h>
 
 extern struct gsmtap_inst *gsmtap_inst;
+extern struct gsmtap_inst *gsmtap_our;
 
 enum dch_state_t {
 	DCH_NONE,
@@ -744,6 +745,11 @@ local_burst_decode(struct l1ctl_burst_ind *bi)
 
             /* Send to GSMTAP */
 			LOGP(DRR, LOGL_NOTICE, "Burst data\n");
+			gsmtap_send(gsmtap_our,
+				arfcn, chan_ts, gsmtap_chan_type, chan_ss,
+				ntohl(bi->frame_nr), bi->rx_level, bi->snr,
+				l2, sizeof(l2)
+			);
 			gsmtap_send(gsmtap_inst,
 				arfcn, chan_ts, gsmtap_chan_type, chan_ss,
 				ntohl(bi->frame_nr), bi->rx_level, bi->snr,

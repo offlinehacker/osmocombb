@@ -50,3 +50,6 @@ doc/html.tar
 
 src/crc*gen.c
 include/osmocom/core/crc*gen.h
+
+build-host
+build-target

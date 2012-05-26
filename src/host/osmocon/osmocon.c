@@ -1023,7 +1023,7 @@ static int handle_read_romload(void)
 			dnload.romload_state = WAITING_IDENTIFICATION;
 			dnload.filename = dnload.previous_filename;
 			dnload.mode = dnload.previous_mode;
-			osmo_serial_set_baudrate(dnload.serial_fd.fd, MODEM_BAUDRATE);
+			//osmo_serial_set_baudrate(dnload.serial_fd.fd, MODEM_BAUDRATE);
 		} else if (!memcmp(buffer, romload_branch_nack,
 			   sizeof(romload_branch_nack))) {
 			printf("Received branch nack, aborting\n");

@@ -24,7 +24,24 @@ from time import sleep
 from najdisisms import NajdiSiSms
 
 class capturedecode(object):
+    """
+    Class used for testing and local decoding of already captured data.
+    Sim card reader is requierd.
+    """ 
+
     def SmartCardGetKcFromRand(self, rand, pin=None):
+        """
+        Gets smart card's kc using rand
+        
+        @param rand: Rand
+        @type rand: str
+        @param pin: Pin
+        @type pin: str
+        
+        @return: Hex representation of kc
+        @rtype: str
+        """ 
+
 	s= SIM()
 	if not s:
 		print "Error opening SIM"
@@ -40,6 +57,21 @@ class capturedecode(object):
 	return b2a_hex(byteToString(ret[1]))
 
     def SmartDecode( self, capture_file, pin=None ):
+        """
+        Using several tshark scripts it finds location updates.
+        It extract all needed parameters from them(sres, rand) and starts
+        data decoding. Output is written to wireshark using burst_decode
+        utlity.
+        
+        @param capture_file: Path to capture file we want to decode
+        @type capture_file: str
+        @param pin: Pin of smart card
+        @type pin: str
+        
+        @return: None
+        @rtype: None
+        """ 
+
         out= subprocess.check_output(" ./captures/location_updates %s" % (capture_file,), shell=True)
         lines= out.split("\n")
         print lines
@@ -51,9 +83,13 @@ class capturedecode(object):
         for line in lines:
             if frameno and tmsi and rand:
                 if tmsi not in results:
-                    results[tmsi]= { frameno: {"kc": self.SmartCardGetKcFromRand(rand, pin), "frameno": [frameno,] }}
+                    results[tmsi]= { frameno: 
+                            {"kc": self.SmartCardGetKcFromRand(rand, pin), 
+                                "frameno": [frameno,] }}
                 else:
-                    results[tmsi][frameno]= {"kc":  self.SmartCardGetKcFromRand(rand, pin), "frameno": [frameno,]}
+                    results[tmsi][frameno]= {"kc":  
+                            self.SmartCardGetKcFromRand(rand, pin), 
+                                "frameno": [frameno,]}
                 print "KC:", results[tmsi][frameno]["kc"]
 
                 frameno= 0
@@ -90,7 +126,8 @@ class capturedecode(object):
             if tmsi not in results:
                 continue
 
-            closest_lu_frameno= min(filter(lambda x:frameno>x,results[tmsi].keys()), key=lambda x:abs(frameno-x))
+            closest_lu_frameno= min(filter(lambda x:frameno>x,results[tmsi].keys()), 
+                    key=lambda x:abs(frameno-x))
 
             if int(frameno) in results[tmsi][closest_lu_frameno]["frameno"]:
                     continue
@@ -102,6 +139,19 @@ class capturedecode(object):
                     self.DecodeBursts( frameno, results[tmsi][lu_frameno]["kc"] )
 
     def DecodeBursts( self, frameno, kc ):
+        """
+        Decodes bursts based on frame number and kc.
+        So if we know where transaction occured we know which file to decode
+        
+        @param frameno: Framenumber to decode
+        @type frameno: int
+        @param kc: Kc witch which we want to decode
+        @type kc: str
+        
+        @return: None
+        @rtype: None
+        """ 
+
         max= sys.maxint
         result= None
 
@@ -432,13 +482,13 @@ class gsmcrack(object):
         tn.close()
         return result
 
-    def __init__( self, filename, kraken_ip="localhost", kraken_port=5555 ):
+    def __init__( self, filename, kraken_ip="localhost", kraken_port=6010):
         self.data= objectify.parse(FileIO(filename))
         self.kraken_ip= kraken_ip
         self.kraken_port= kraken_port
 
 if __name__ == "__main__":
-    a=gsmcrack(sys.argv[1], "localhost", 5555)
+    a=gsmcrack(sys.argv[1], "localhost", 6010)
     KC= a.CrackData(sys.argv[2])
     print "KC:", KC
 

@@ -10,6 +10,7 @@ import sys
 import os, fcntl, fcntl, termios, termios
 import operator
 import heapq
+import time
 
 from lxml import etree
 from lxml import objectify
@@ -21,6 +22,7 @@ from jinja2 import Template
 
 from time import sleep
 
+from multiprocessing import Process
 from najdisisms import NajdiSiSms
 
 class capturedecode(object):
@@ -177,8 +179,8 @@ class NajdiSiSms_gsm(object):
         self.password= password
         self.sender= NajdiSiSms()
 
-    def send(number, silent):
-        self.sender.send_sms(username,password,number,"test")
+    def send(self, number, silent=True):
+        self.sender.send_sms(self.username,self.password,number,"test")
 
 class findtmsi(object):
     """
@@ -210,13 +212,23 @@ class findtmsi(object):
         last_tmsi={}
         last_tmsi_index=0
         best_tmsi={}
-        send_sms=True
 
         tmsi_count=0
         immass_count=0
+        sms_process=None
 
+        #Let's start sniffing
         p=pexpect.spawn("./ccch_scan -s %s -a %d -i 127.0.0.1" % (self.socket, arfcn),
                 timeout=400)
+
+        #Let's send first sms
+        sms_process= Process(target=self.sms_sender.send, args=(self.number,))
+        sms_process.start()
+
+        #Last time that sms was sent
+        last_time= time.localtime()
+
+        #Main loop
         while(True):
             i=p.expect(["GSM48 IMM ASS","M\((\d+)\)"])
 
@@ -230,8 +242,6 @@ class findtmsi(object):
                 last_tmsi={}
                 tmsi_count=0
                 immass_count+=1
-
-                send_sms= True
             if(i==1):
                 if p.match.group(1) not in last_tmsi:
                     last_tmsi[last_tmsi_index]=p.match.group(1)
@@ -242,9 +252,13 @@ class findtmsi(object):
 
                     last_tmsi_index+=1
 
-            if send_sms and self.sms_sender:
-                self.sms_sender.send(number, silent=True)
-                send_sms= False
+            now= time.localtime()
+            if( self.sms_sender 
+                    and (time.mktime(now) - time.mktime(last_time))>10 
+                    and not sms_process.is_alive() ):
+                sms_process= Process(target=self.sms_sender.send, args=(self.number,))
+                sms_process.start()
+                last_time=time.localtime()
 
             if immass_count>=self.immass_count:
                 break

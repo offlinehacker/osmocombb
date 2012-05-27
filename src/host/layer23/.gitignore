@@ -40,6 +40,7 @@ src/misc/captures/*.dat
 src/misc/*.dat
 src/misc/cell_log_*
 src/misc/*.pyc
+src/misc/tags
 src/misc/KC
 src/misc/find_kc
 src/mobile/mobile

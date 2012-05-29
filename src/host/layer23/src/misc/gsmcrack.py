@@ -25,6 +25,9 @@ from jinja2 import Template
 
 from time import sleep
 
+from curses import ascii
+from smspdu import SMS_SUBMIT
+
 from multiprocessing import Process
 from najdisisms import NajdiSiSms
 
@@ -184,6 +187,23 @@ class NajdiSiSms_gsm(object):
 
     def send(self, number, silent=True):
         self.sender.send_sms(self.username,self.password,number,"test")
+
+class atsms(object):
+    """
+    Sends sms using AT modem
+    """ 
+
+    def __init__(self,sp_name):
+        self.sp= serial.Serial(sp_name, timeout=5)
+
+    def send(self, number):
+        self.sp.write("AT\r\n")
+        resp= self.sp.readline()
+        self.sp.write("AT+CMGF=0\r\n")
+
+        pdu = SMS_SUBMIT.create('041111111', number, 'test', tp_pid=64).toPDU()
+        ser.write("AT+CMGS="+str(len(pdu)/2))
+        ser.write("00"+pdu+ascii.ctrl("z"))
 
 class findtmsi(object):
     """

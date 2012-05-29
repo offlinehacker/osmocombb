@@ -15,7 +15,6 @@ import argparse
 import termcolor
 import serial
 
-from lxml import etree
 from lxml import objectify
 from io import FileIO
 from binascii import *
@@ -39,15 +38,15 @@ class capturedecode(object):
 
     def SmartCardGetKcFromRand(self, rand, pin=None):
         """
-        Gets smart card's kc using rand
+        Gets kc from smartcard by passing rand to it
         
-        @param rand: Rand
-        @type rand: str
-        @param pin: Pin
-        @type pin: str
+        :param rand: Rand for which we want to get kc
+        :type rand: str
+        :param pin: Pin for sim card
+        :type pin: str
         
-        @return: Hex representation of kc
-        @rtype: str
+        :returns : Kc
+        :rtype: str
         """ 
 
 	s= SIM()
@@ -66,18 +65,18 @@ class capturedecode(object):
 
     def SmartDecode( self, capture_file, pin=None ):
         """
-        Using several tshark scripts it finds location updates.
+        Using several tshark scripts it finds location update in captured pcap file 
         It extract all needed parameters from them(sres, rand) and starts
         data decoding. Output is written to wireshark using burst_decode
         utlity.
         
-        @param capture_file: Path to capture file we want to decode
-        @type capture_file: str
-        @param pin: Pin of smart card
-        @type pin: str
+        :param capture_file: Path to capture file we want to decode
+        :type capture_file: str
+        :param pin: Pin of smart card
+        :type pin: str
         
-        @return: None
-        @rtype: None
+        :return: None
+        :rtype: None
         """ 
 
         out= subprocess.check_output(" ./captures/location_updates %s" % (capture_file,), shell=True)
@@ -146,18 +145,18 @@ class capturedecode(object):
                 for frameno in results[tmsi][lu_frameno]["frameno"]:
                     self.DecodeBursts( frameno, results[tmsi][lu_frameno]["kc"] )
 
-    def DecodeBursts( self, frameno, kc ):
+    def DecodeFrames( self, frameno, kc ):
         """
-        Decodes bursts based on frame number and kc.
+        Decodes frames based on frame number and kc.
         So if we know where transaction occured we know which file to decode
         
-        @param frameno: Framenumber to decode
-        @type frameno: int
-        @param kc: Kc witch which we want to decode
-        @type kc: str
+        :param frameno: Framenumber to decode
+        :type frameno: int
+        :param kc: Kc witch which we want to decode
+        :type kc: str
         
-        @return: None
-        @rtype: None
+        :return: None
+        :rtype: None
         """ 
 
         max= sys.maxint
@@ -180,13 +179,42 @@ class capturedecode(object):
             print c.DecodeData(kc)
 
 class NajdiSiSms_gsm(object):
+    """
+    Class for sending smses using najdi.si web service(usefull for slovenia)
+    """ 
+
     def __init__(self,username, password):
+        """
+        Initializes Najdi.si sms web service
+
+        .. todo:: Move this class to NajdiSiSms.py
+        
+        :param username: Username you registered at najdi.si
+        :type username: str
+        :param password: Password you registered at najdi.si
+        :type password: str
+        
+        :returns : None
+        :rtype: None
+        """ 
         self.username= username
         self.password= password
         self.sender= NajdiSiSms()
 
     def send(self, number, silent=True):
-        self.sender.send_sms(self.username,self.password,number,"test")
+        """
+        Sends sms 
+        
+        :param number: Number to send to
+        :type number: str
+        :param silent: Should we send slient sms or not
+        :type silent: boolean
+        
+        :returns : Result of sending
+        :rtype: boolean
+        """ 
+
+        return self.sender.send_sms(self.username,self.password,number,"test")
 
 class atsms(object):
     """
@@ -212,9 +240,16 @@ class findtmsi(object):
     """
 
     def Scan(self):
+        """
+        Scans through all arfcns, trying to find the one that has our tmsi
+        
+        :returns : best tmsi and best arfcn
+        :rtype: list
+        """ 
         max_occurenc=0
         max_tmsi=""
         max_arfcn=0
+
         for arfcn in self.arfcns:
             print "Scanning arfcn:", arfcn
             (c,c2,t)=self.ScanArfcn(arfcn)
@@ -232,6 +267,16 @@ class findtmsi(object):
         return (max_tmsi, max_arfcn)
 
     def ScanArfcn(self, arfcn):
+        """
+        Scans speciffic arfnc while tring to find target tmsi
+        
+        :param arfcn: Arfcn to scan
+        :type arfcn: int
+        
+        :returns : Best tmsi occurance, second best tmsi occurance, and tmsi
+        :rtype: list
+        """ 
+
         last_tmsi={}
         last_tmsi_index=0
         best_tmsi={}
@@ -292,7 +337,27 @@ class findtmsi(object):
         return (max(best_tmsi.values()), heapq.nlargest(2, best_tmsi.values())[1],
                 max(best_tmsi.iteritems(), key=operator.itemgetter(1))[0])
 
-    def __init__(self, arfcns, immass_count=60, socket="/tmp/osmocom_l2_1", sms_sender=None, number=None):
+    def __init__(self, arfcns, immass_count=60, socket="/tmp/osmocom_l2_1", 
+            sms_sender=None, number=None):
+        """
+        Creates instance of findtmsi class
+        
+        :param arfcns: Arfcns we want to scan for taget tmsi
+        :type arfcns: list
+        :param immass_count: Count of immidiate assignment frames we want to
+                             capture for esitmation which tmsi is correct.
+        :type immass_count: int
+        :param socket: Osmocom socket on which we are running layer1
+        :type socket: string
+        :param sms_sender: Sms sender class
+        :type sms_sender: object
+        :param number: Target mobile number
+        :type number: str
+        
+        :returns : None
+        :rtype: None
+        """ 
+
         self.arfcns= arfcns
         self.number= number
         self.socket= socket
@@ -300,6 +365,12 @@ class findtmsi(object):
         self.immass_count= immass_count
 
 class gsmcrack(object):
+    """
+    Class for cracing gsm frames using kraken.
+
+    .. todo:: better prediction engine
+    """ 
+
     def ErrorRate( self, ul ):
         rates= self.data.xpath("/scan/frame[@cipher='0' and @uplink='%d']/error" % ul)
         sum= 0
@@ -318,6 +389,18 @@ class gsmcrack(object):
         return r
 
     def DecodeData( self, kc ):
+        """
+        Decodes input data
+
+        .. todo:: Move this function to gsmdecode class
+        
+        :param kc: Kc used for decoding
+        :type kc: str
+        
+        :returns : Decoded data
+        :rtype: str
+        """ 
+
         frames= self.data.xpath("/scan/frame")
         data= []
         for frame in frames:
@@ -326,6 +409,18 @@ class gsmcrack(object):
         return data
 
     def CrackData( self, PredictFile=None ):
+        """
+        Cracks data using prediction file.
+
+        .. todo:: Better prediction engine
+        
+        :param PredictFile: File path
+        :type PredictFile: str
+        
+        :returns : Kc/False
+        :rtype: str, boolean
+        """ 
+
         uplink= True
         downlink= True
 
@@ -396,6 +491,18 @@ class gsmcrack(object):
         return False
 
     def CrackFrame( self, frame, data ):
+        """
+        Tries to crack frame using prediction frame data
+        
+        :param frame: Frame data we want to crack
+        :type frame: str
+        :param data: Prediction data to use with cracking
+        :type data: str
+        
+        :returns : Kc/False
+        :rtype: str, boolean
+        """ 
+
         key_result= False
         plaintexts= self.RunEncodeBursts(data)
 
@@ -433,12 +540,40 @@ class gsmcrack(object):
         return False
 
     def RunEncodeBursts( self, data ):
+        """
+        Tries to encode bursts
+
+        .. note:: This function requiers burst_decode process in execution path
+        .. todo:: Move this function to gsmdecode class
+        
+        :param data: Data we want to encode
+        :type data: str
+        
+        :returns : Encoded data
+        :rtype: str
+        """ 
+
         result= objectify.parse(io.StringIO(unicode(subprocess.check_output( "./burst_encode --data %s" % (data,),  shell=True))))
         result= result.xpath("/frame/burst/text()")
 
         return result
 
     def RunDecodeBursts( self, frame, kc ) :
+        """
+        Tries to decode bursts
+
+        .. note:: This function requiers burst_decode process in execution path
+        .. todo:: Move this function to gsmdecode class
+        
+        :param frame: Frame to decode
+        :type frame: str
+        :param kc: KC used for decoding
+        :type kc: str
+        
+        :returns : Decoded data
+        :rtype: str
+        """ 
+
         out=""
         for burst in frame.xpath("burst"):
             out+= "--burst %s " % (burst.cyphertext.text.strip(),)
@@ -472,6 +607,24 @@ class gsmcrack(object):
         return (t1<<11)|(t3<<5)|t2
 
     def RunFindKc( self, key, offset, frameno1, frameno2, keystream):
+        """
+        Tries to find kc based on reversed keystream params from kraken
+        
+        :param key: key found
+        :type key: str
+        :param offset: kraken offset param
+        :type offset: int
+        :param frameno1: Frame number of cracked bursts
+        :type frameno1: int
+        :param frameno2: Frame number of any other burst in frame
+        :type frameno2: int
+        :param keystream: Keystream that we were cracking
+        :type keystream: str
+        
+        :returns : Kc
+        :rtype: str
+        """ 
+
         framecount1= self.GetFrameCount(frameno1)
         framecount2= self.GetFrameCount(frameno2)
 
@@ -490,6 +643,19 @@ class gsmcrack(object):
         return False
 
     def RunKraken( self, keystream ):
+        """
+        Runs kraken for speciffic keystream.
+
+        Kraken tries to reverse keystream and if it succedes it its possible
+        reversed key, we can use in find_kc.
+        
+        :param keystream: Keystream that we try to reverse
+        :type keystream: str
+        
+        :returns : List of (reversed key, offset)
+        :rtype: list
+        """ 
+
         print "Running kraken for keystream", keystream
 
         tn= telnetlib.Telnet(self.kraken_ip, self.kraken_port)
@@ -533,6 +699,19 @@ class gsmcrack(object):
         return result
 
     def __init__( self, filename, kraken_ip="localhost", kraken_port=6010):
+        """
+        Initializes gsmcrack with file we want to crack and kraken server params
+        
+        :param filename: File we want to crack
+        :type filename: str
+        :param kraken_ip: Ip that kraken is running os
+        :type kraken_ip: str
+        :param kraken_port: Port that kraken is running on
+        :type kraken_port: int
+        
+        :returns : None
+        :rtype: None
+        """ 
         self.data= objectify.parse(FileIO(filename))
         self.kraken_ip= kraken_ip
         self.kraken_port= kraken_port
@@ -559,12 +738,16 @@ There is NO WARRANTY, to the extent permitted by law.
     parser = argparse.ArgumentParser(epilog=
 termcolor.colored(
 """  
-      _|_|_|    _|_|_|   _|      _|          ,--.!,
-     _|        _|        _|_|  _|_|       __/   -*-
-     _|  _|_|    _|_|    _|  _|  _|     ,8888.  '|`
-     _|    _|      _|    _|      _|     880088     
-       _|_|_|  _|_|_|    _|      _|     `8888'     
-        All your base are belong to us...
+      _|_|_|    _|_|_|   _|      _|       ,--.!,
+     _|        _|        _|_|  _|_|    __/   -*-
+     _|  _|_|    _|_|    _|  _|  _|  ,8888.  '|`
+     _|    _|      _|    _|      _|  880088     
+       _|_|_|  _|_|_|    _|      _|  `8888'     
+             __ __   _   __ _
+            /   |_\ /_\ /   |/ 
+            \__ | \ / \ \__ |\ 
+
+      All your base are belong to us...
     
 ....GSM penetration testing tools based on osmocom 
             opensource gsm stack....

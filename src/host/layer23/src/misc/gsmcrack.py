@@ -537,11 +537,82 @@ class gsmcrack(object):
         self.kraken_ip= kraken_ip
         self.kraken_port= kraken_port
 
-if __name__ == "__main__":
-    a=gsmcrack(sys.argv[1], "localhost", 6010)
-    KC= a.CrackData(sys.argv[2])
-    print "KC:", KC
+#if __name__ == "__main__":
+#    a=gsmcrack(sys.argv[1], "localhost", 6666)
+#    KC= a.CrackData(sys.argv[2])
+#    print "KC:", KC
+#
+#    if KC:
+#        print "Decoding data..."
+#        a.DecodeData(KC)
 
-    if KC:
-        print "Decoding data..."
-        a.DecodeData(KC)
+if __name__ == "__main__":
+    desc="""
+Copyright (C) 2012 Jaka Hudoklin <jakahudoklin@gmail.com>
+Thanks to osmocom who made everything possible
+
+License GPLv2+: GNU GPL version 2 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
+"""
+    parser = argparse.ArgumentParser(epilog=
+termcolor.colored(
+"""  
+      _|_|_|    _|_|_|   _|      _|          ,--.!,
+     _|        _|        _|_|  _|_|       __/   -*-
+     _|  _|_|    _|_|    _|  _|  _|     ,8888.  '|`
+     _|    _|      _|    _|      _|     880088     
+       _|_|_|  _|_|_|    _|      _|     `8888'     
+        All your base are belong to us...
+    
+....GSM penetration testing tools based on osmocom 
+            opensource gsm stack....
+""",color="green",attrs=['blink']),
+    description=desc, 
+    formatter_class=argparse.RawDescriptionHelpFormatter)
+    subparsers= parser.add_subparsers()
+
+    capture= subparsers.add_parser("capture", description=desc,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            help="Do some actions with captures like cracking and decoding")
+    capture_group= capture.add_mutually_exclusive_group()
+    capture_group.add_argument("--crack", action="store_true", 
+            help="Cracks passed data")
+    capture_group.add_argument("--decode", action="store_true", 
+            help="Decodes passed data")
+    capture.add_argument("--data", required=True, nargs="+",
+            help="Capture files to make action on")
+    capture.add_argument("--prediction", nargs="+",
+            help="Prediction files to use or folder with predictions")
+    capture.add_argument("--kraken_ip", 
+            default=os.environ.get("KRAKEN_IP","127.0.0.1"),
+            help="""Ip where you run kraken, default localhost, 
+                    or KRAKEN_IP environment variable""")
+    capture.add_argument("--kraken_port", 
+            default=int(os.environ.get("KRAKEN_PORT",6666)),
+            help="""Port where you run kraken, default 6666,
+                    or KRAKEN_PORT environemnt variable""")
+
+    findtmsi= subparsers.add_parser("findtmsi", description=desc,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            help="Finds tmsi using different methods")
+    findtmsi.add_argument("--arfcn", nargs="+", type=int,
+            help="Arfcns on which to scan")
+
+    smart_decode= subparsers.add_parser("smart_decode",description=desc,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            help="Decodes all capture files with help of smart card reader")
+
+    args = parser.parse_args()
+
+    if args.crack:
+        if not args.prediction:
+            print "Prediction file not specified"
+            exit(0)
+        for data in args.data:
+            a= gsmcrack(data,args.kraken_ip, args.kraken_port)
+            for prediction in args.prediction:
+                a.CrackData(prediction)
+    #if args.findtmsi:
+    #    a=findtmsi(

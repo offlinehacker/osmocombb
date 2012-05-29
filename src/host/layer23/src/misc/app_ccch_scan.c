@@ -726,6 +726,15 @@ local_burst_decode(struct l1ctl_burst_ind *bi)
                     fprintf( app_state.fh, "%02x", l2[i]);
                 fprintf( app_state.fh, "\n</data>\n");
 
+                /* RR messges */
+                if(l2[5]==0x06)
+                {
+                    if(l2[6]==0x01d)
+                        fprintf( app_state.fh, "<system_information>5</system_information>\n");
+                    if(l2[6]==0x1e)
+                        fprintf( app_state.fh, "<system_information>6</system_information>");
+                }
+
                 //Error rate per burst
                 xcch_encode(raw_bursts, l2);
                 for(i=0;i<4;i++) {

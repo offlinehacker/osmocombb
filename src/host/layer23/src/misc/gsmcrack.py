@@ -30,7 +30,7 @@ from smspdu import SMS_SUBMIT
 from multiprocessing import Process
 from najdisisms import NajdiSiSms
 
-class capturedecode(object):
+class smartdecode(object):
     """
     Class used for testing and local decoding of already captured data.
     Sim card reader is requierd.
@@ -79,7 +79,7 @@ class capturedecode(object):
         :rtype: None
         """ 
 
-        out= subprocess.check_output(" ./captures/location_updates %s" % (capture_file,), shell=True)
+        out= subprocess.check_output(" ./get_location_updates %s" % (capture_file,), shell=True)
         lines= out.split("\n")
         print lines
 
@@ -118,7 +118,7 @@ class capturedecode(object):
                     rand= result.group(1).replace(":", "")
                     print "RAND:", rand
 
-        out= subprocess.check_output("./captures/paging_responses %s" % (capture_file,), shell=True)
+        out= subprocess.check_output("./get_paging_responses %s" % (capture_file,), shell=True)
         lines= out.split("\n")
         print lines
 

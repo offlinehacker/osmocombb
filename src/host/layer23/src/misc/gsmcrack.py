@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import os
 import telnetlib
 import pexpect
 import subprocess
@@ -7,7 +8,6 @@ import re
 import random
 import io
 import sys
-import os, fcntl, fcntl, termios, termios
 import operator
 import heapq
 import time

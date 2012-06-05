@@ -226,16 +226,46 @@ class atsms(object):
     """ 
 
     def __init__(self,sp_name):
-        self.sp= serial.Serial(sp_name, timeout=5)
+        self.sp= serial.Serial(sp_name, timeout=0.2)
 
-    def send(self, number):
-        self.sp.write("AT\r\n")
-        resp= self.sp.readline()
-        self.sp.write("AT+CMGF=0\r\n")
+    def send(self, number, silent=True):
+        print "Testing modem"
+        res= self._ser_send("AT\r")
+        if "OK" not in res:
+            return False
+        print "Modem seems alive"
 
-        pdu = SMS_SUBMIT.create('041111111', number, 'test', tp_pid=64).toPDU()
-        ser.write("AT+CMGS="+str(len(pdu)/2))
-        ser.write("00"+pdu+ascii.ctrl("z"))
+        print "Setting pdu mode"
+        res= self._ser_send("AT+CMGF=0\r")
+        if "OK" not in res:
+            return False
+        print "Pdu mode set"
+
+        print "Creating and sending pdu"
+
+        pdu = SMS_SUBMIT.create('38641111111', number, 'test', tp_pid=64, tp_srr=1).toPDU()
+        if not silent:
+            pdu = SMS_SUBMIT.create('38641111111', number, 'test').toPDU()
+        print "PDU:",pdu, "with len:",str(len(pdu)/2)
+        res= self._ser_send("AT+CMGS="+str(len(pdu)/2)+"\r")
+
+        res= self._ser_send("00"+pdu)
+        res= self._ser_send(ascii.ctrl("z"))
+
+        print "Pdu sent"
+
+    def _ser_send(self, s):
+        self.sp.write(s)
+        sleep(0.2)
+        ret=""
+        while True:
+            data = self.sp.read(64)
+            if len(data) != 0:
+                ret+=data
+            else:
+                break
+
+        return ret
 
 class findtmsi(object):
     """

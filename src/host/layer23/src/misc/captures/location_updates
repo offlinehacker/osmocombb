@@ -1,3 +1,0 @@
-#!/bin/bash
-tshark -Tfields -e frame.time -e gsmtap.frame_nr -e gsm_a.dtap.rand -e gsm_a.tmsi  \
--R "gsm_a.dtap_msg_mm_type == 0x08 or gsm_a.dtap_msg_mm_type == 0x12" -r $@

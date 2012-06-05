@@ -143,7 +143,7 @@ class smartdecode(object):
         for tmsi in results:
             for lu_frameno in results[tmsi]:
                 for frameno in results[tmsi][lu_frameno]["frameno"]:
-                    self.DecodeBursts( frameno, results[tmsi][lu_frameno]["kc"] )
+                    self.DecodeFrames( frameno, results[tmsi][lu_frameno]["kc"] )
 
     def DecodeFrames( self, frameno, kc ):
         """
@@ -173,10 +173,9 @@ class smartdecode(object):
 
         if result:
             print result
-            c=gsmcrack(result)
 
             print "Decoded bursts", result
-            print c.DecodeData(kc)
+            print gsmrecode.DecodeData(kc, result)
 
 class NajdiSiSms_gsm(object):
     """
@@ -364,6 +363,99 @@ class findtmsi(object):
         self.sms_sender= sms_sender
         self.immass_count= immass_count
 
+class Callable:
+    def __init__(self, anycallable):
+        self.__call__ = anycallable
+
+class gsmrecode(object):
+    def _RunEncodeBursts( data ):
+        """
+        Tries to encode bursts
+
+        .. note:: This function requiers burst_decode process in execution path
+        
+        :param data: Data we want to encode
+        :type data: str
+        
+        :returns : Encoded data
+        :rtype: str
+        """ 
+
+        result= objectify.parse(io.StringIO(unicode(subprocess.check_output( "./burst_encode --data %s" % (data,),  shell=True))))
+        result= result.xpath("/frame/burst/text()")
+
+        return result
+
+    RunEncodeBursts=Callable(_RunEncodeBursts)
+
+    def _RunDecodeBursts( frame, kc ) :
+        """
+        Tries to decode bursts
+
+        .. note:: This function requiers burst_decode process in execution path
+        
+        :param frame: Frame to decode
+        :type frame: str
+        :param kc: KC used for decoding
+        :type kc: str
+        
+        :returns : Decoded data
+        :rtype: str
+        """ 
+
+        out=""
+        for burst in frame.xpath("burst"):
+            out+= "--burst %s " % (burst.cyphertext.text.strip(),)
+
+        try:
+            main_params= "./burst_decode -i 127.0.0.1 --ul %d --fn %d -t %d " % (int(frame.attrib["uplink"]), int(frame.xpath("burst")[0].attrib["fn"]), int(frame.chan_type),)
+        except:
+            print "Error:", sys.exc_info()[0]
+            return None
+
+        main_params+= out
+
+        if int(frame.attrib["cipher"])==1:
+            result= subprocess.check_output(main_params + " --kc " + kc, shell=True)
+        else:
+            result= subprocess.check_output(main_params , shell=True)
+
+        result= re.search("RAW\sDATA:\s+([0-9abcdef ]+)", result)
+        if result:
+            return result.group(1)
+
+        print "Error decoding", main_params, "with kc", kc
+
+        return None
+
+    RunDecodeBursts= Callable(_RunDecodeBursts)
+
+    def _DecodeData( kc, data ):
+        """
+        Decodes input data
+        
+        :param kc: Kc used for decoding
+        :type kc: str
+        :param data: Data we want to decode in form of xml frames or as input
+                     filename of file with xml frames in it.
+        :type: xml, str
+        
+        :returns : Decoded data
+        :rtype: str
+        """ 
+
+        if isinstance(data, basestring):
+            data= objectify.parse(FileIO(data))
+
+        frames= data.xpath("/scan/frame")
+        data= []
+        for frame in frames:
+            data.append(gsmrecode.RunDecodeBursts( frame, kc ))
+
+        return data
+
+    DecodeData= Callable(_DecodeData)
+
 class gsmcrack(object):
     """
     Class for cracing gsm frames using kraken.
@@ -504,7 +596,7 @@ class gsmcrack(object):
         """ 
 
         key_result= False
-        plaintexts= self.RunEncodeBursts(data)
+        plaintexts= gsmrecode.RunEncodeBursts(data)
 
         bursts= frame.xpath("burst")
 
@@ -538,66 +630,6 @@ class gsmcrack(object):
                     print "We give up, continue..."
 
         return False
-
-    def RunEncodeBursts( self, data ):
-        """
-        Tries to encode bursts
-
-        .. note:: This function requiers burst_decode process in execution path
-        .. todo:: Move this function to gsmdecode class
-        
-        :param data: Data we want to encode
-        :type data: str
-        
-        :returns : Encoded data
-        :rtype: str
-        """ 
-
-        result= objectify.parse(io.StringIO(unicode(subprocess.check_output( "./burst_encode --data %s" % (data,),  shell=True))))
-        result= result.xpath("/frame/burst/text()")
-
-        return result
-
-    def RunDecodeBursts( self, frame, kc ) :
-        """
-        Tries to decode bursts
-
-        .. note:: This function requiers burst_decode process in execution path
-        .. todo:: Move this function to gsmdecode class
-        
-        :param frame: Frame to decode
-        :type frame: str
-        :param kc: KC used for decoding
-        :type kc: str
-        
-        :returns : Decoded data
-        :rtype: str
-        """ 
-
-        out=""
-        for burst in frame.xpath("burst"):
-            out+= "--burst %s " % (burst.cyphertext.text.strip(),)
-
-        try:
-            main_params= "./burst_decode -i 127.0.0.1 --ul %d --fn %d -t %d " % (int(frame.attrib["uplink"]), int(frame.xpath("burst")[0].attrib["fn"]), int(frame.chan_type),)
-        except:
-            print "Error:", sys.exc_info()[0]
-            return None
-
-        main_params+= out
-
-        if int(frame.attrib["cipher"])==1:
-            result= subprocess.check_output(main_params + " --kc " + kc, shell=True)
-        else:
-            result= subprocess.check_output(main_params , shell=True)
-
-        result= re.search("RAW\sDATA:\s+([0-9abcdef ]+)", result)
-        if result:
-            return result.group(1)
-
-        print "Error decoding", main_params, "with kc", kc
-
-        return None
 
     def GetFrameCount( self, frameno):
         t1= int(frameno)/1326

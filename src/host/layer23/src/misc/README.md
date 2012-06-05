@@ -56,13 +56,13 @@ Install deps for gsmcrack.py:
 
 Install sniffer:
 
-    git clone https://github.com/offlinehacker/osmocom-bb.git
+    git clone git://github.com/offlinehacker/osmocom-bb.git
     cd osmocom-bb/src
     make
 
 Install spoofer:
 
-    git clone https://github.com/offlinehacker/osmocom-bb.git osmocom-bb-identity
+    git clone git://github.com/offlinehacker/osmocom-bb.git osmocom-bb-identity
     cd osmocom-bb-identity
     git checkout identity
     cd src

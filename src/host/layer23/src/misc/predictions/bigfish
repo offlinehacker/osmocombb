@@ -1,0 +1,12 @@
+{ "method": "offset", "args": { "offset": 5, "prediction": "03620d0518032b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b", "process_count": 2}, "seek_mode": "normal"}
+{ "method": "offset", "args": { "offset": 3, "prediction": "03420d0518032b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b", "process_count": 2}, "seek_mode": "normal"}
+{ "method": "offset", "args": { "offset": 1, "prediction": "03420d0518032b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b", "process_count": 2}, "seek_mode": "normal"}
+{ "method": "offset", "args": { "offset": 7, "prediction": "03620d0518032b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b", "process_count": 2}, "seek_mode": "normal"}
+{ "method": "sysinfo", "args": {"pl": 1, "offset":408, "filter": 5, "select": "last", "process_count": 3}, "seek_mode":"normal" }
+{ "method": "sysinfo", "args": {"pl": 0, "offset":408, "filter": 5, "select": "last", "process_count": 3}, "seek_mode":"normal" }
+{ "method": "sysinfo", "args": {"pl": 1, "ta":1, "offset":408, "filter": 5, "select": "last", "process_count": 3}, "seek_mode":"normal" }
+{ "method": "sysinfo", "args": {"pl": 0, "ta":1, "offset":408, "filter": 5, "select": "last", "process_count": 3}, "seek_mode":"normal" }
+{ "method": "sysinfo", "args": {"pl": 1, "ta":-1, "offset":408, "filter": 5, "select": "last", "process_count": 3}, "seek_mode":"normal" }
+{ "method": "sysinfo", "args": {"pl": 0, "ta":-1, "offset":408, "filter": 5, "select": "last", "process_count": 3}, "seek_mode":"normal" }
+{ "method": "sysinfo", "args": {"pl": 2, "ta":0, "offset":408, "filter": 5, "select": "last", "process_count": 3}, "seek_mode":"normal" }
+{ "method": "sysinfo", "args": {"pl": 2, "ta":1, "offset":408, "filter": 5, "select": "last", "process_count": 3}, "seek_mode":"normal" }

@@ -14,6 +14,8 @@ import time
 import argparse
 import termcolor
 import serial
+import glob
+import json
 
 from lxml import objectify
 from io import FileIO
@@ -26,6 +28,9 @@ from time import sleep
 
 from curses import ascii
 from smspdu import SMS_SUBMIT
+
+from prediction_methods import SysInfo
+from prediction_methods import offset
 
 from multiprocessing import Process
 from najdisisms import NajdiSiSms
@@ -463,8 +468,20 @@ class gsmcrack(object):
     .. todo:: better prediction engine
     """ 
 
-    def ErrorRate( self, ul ):
-        rates= self.data.xpath("/scan/frame[@cipher='0' and @uplink='%d']/error" % ul)
+    def ErrorRate( self, ul, data ):
+        """
+        Gets error rate of uplink or downlink data
+        
+        :param ul: 1 for uplink and 0 for donwnlink
+        :type ul: int
+        :param data: Xml frames
+        :type data: xml
+        
+        :returns : Error rate
+        :rtype: float
+        """ 
+
+        rates= data.xpath("/scan/frame[@cipher='0' and @uplink='%d']/error" % ul)
         sum= 0
         for e in rates:
             sum+= e
@@ -478,31 +495,20 @@ class gsmcrack(object):
             b = ord(b2[i])
             r = r+chr(48^a^b)
 
+        return sum/len(rates)
+
+    def xor( self, b1, b2 ):
+        r=""
+        for i in range(114):
+            a = ord(b1[i])
+            b = ord(b2[i])
+            r = r+chr(48^a^b)
+
         return r
 
-    def DecodeData( self, kc ):
+    def CrackData( self, PredictFile=None, debug=False ):
         """
-        Decodes input data
-
-        .. todo:: Move this function to gsmdecode class
-        
-        :param kc: Kc used for decoding
-        :type kc: str
-        
-        :returns : Decoded data
-        :rtype: str
-        """ 
-
-        frames= self.data.xpath("/scan/frame")
-        data= []
-        for frame in frames:
-            data.append(self.RunDecodeBursts( frame, kc ))
-
-        return data
-
-    def CrackData( self, PredictFile=None ):
-        """
-        Cracks data using prediction file.
+        Cracks data using prediction file
 
         .. todo:: Better prediction engine
         
@@ -513,73 +519,144 @@ class gsmcrack(object):
         :rtype: str, boolean
         """ 
 
-        uplink= True
-        downlink= True
-
-        print str(len(self.data.xpath("/scan/frame"))), "frames avalible", 
-
-        #Check if uplink or downlink data was too nasty for beeing decoded or
-        #if there were too many errors
-        if( len(self.data.xpath("/scan/frame[@cipher='0' and @uplink='1']/data"))!=
-            len(self.data.xpath("/scan/frame[@cipher='0' and @uplink='1']")) or
-            self.ErrorRate(1)>0.02 ):
-            print "Ignoring uplink"
-            uplink= False
-        if( len(self.data.xpath("/scan/frame[@cipher='0' and @uplink='0']/data"))!=
-            len(self.data.xpath("/scan/frame[@cipher='0' and @uplink='0']")) or
-            self.ErrorRate(0)>0.02 ):
-            print "Ignoring downlink"
-            downlink= False
-        if( not uplink and not downlink ):
-            print "Too mouch errors"
-            return False
-
         if not PredictFile:
             print "Predict file not specified"
             return False
 
-        frames= self.data.xpath("/scan/frame[@cipher='1']")
-        print "Cracking %d encripted frames." % (len(frames),)
-        sys_info= self.data.xpath("/scan/frame/system_information")[0].getparent()
+        (filename,data)=self.data[0]
 
-        cframe=None
-        cfn=0
+        print "Cracking following captures:"
+        remove=[]
+        for info in self.data:
+            print "Capture file: ", info["f"]
+            print "\tWith,", str(len(info["capture"].xpath("/scan/frame"))), "frames avalible"
+        
+            # Check if uplink or downlink data was too nasty for beeing
+            # decoded or if there were too many errors
+            data= info["capture"]
+            if( len(data.xpath("/scan/frame[@cipher='0' and @uplink='1']/data"))!=
+                len(data.xpath("/scan/frame[@cipher='0' and @uplink='1']")) or
+                self.ErrorRate(1, data)>0.02 ):
+                print "Ignoring uplink"
+                info["ignore_ul"]= True
+            if( len(data.xpath("/scan/frame[@cipher='0' and @uplink='0']/data"))!=
+                len(data.xpath("/scan/frame[@cipher='0' and @uplink='0']")) or
+                self.ErrorRate(0, data)>0.02 ):
+                print "Ignoring downlink"
+                info["ignore_dl"]= True
+            if( (info.get("ignore_ul") is not None)
+                    and (info.get("ignore_dl") is not None) ):
+                print "Too mouch errors in", info["f"]
+            bad_count=0
+            for frame in data.xpath("/scan/frame"):
+                if len(frame.xpath("burst"))<4:
+                    bad_count+=1
+            if bad_count>5:
+                remove.append(info)
 
+        for r in remove:
+            self.data.remove(r)
+
+        # Opens prediction file and starts cracking based on rules in
+        # prediction file
         with open(PredictFile) as f:
-                fcontent = "".join( f.readlines() )
-                template = Template(fcontent)
-                content= template.render(os.environ).split("\n")
-                print "We are guessing:\n", "\n".join(content)
+            fcontent = "".join( f.readlines() )
+            template = Template(fcontent)
+            content= template.render(os.environ).split("\n")
+            print "We are guessing:\n", "\n".join(content)
 
-                for (i,line) in enumerate(content):
-                    (method, offset, data)= line.split()
-                    print "Trying frame with offset %s based on method %s" % (offset, method)
+            predictions=[]
+            for line in content: predictions.append(json.loads(line))
 
-                    if "sys" in method:
-                        cfn= int(sys_info.xpath("burst")[-1].attrib["fn"])+int(offset)
-                        if "none" in data:
-                            data=sys_info.xpath("data")[0].text.strip()
-                        cframe= self.data.xpath("/scan/frame/burst[@fn="+str(cfn)+"]")[0].getparent()
+            rounds= 0
+            end= False
+            while not end:
+                print "Starting cracking round", rounds
+                for (i,prediction) in enumerate(predictions):
+                    print "Using prediction", str(i), content[i]
+                    prediction["end"]= False
 
-                    if "offset" in method:
-                        cframe= frames[int(offset)]
-                        cfn= int(offset)
+                    method= filter(lambda prediction_method: 
+                                    prediction["method"]==prediction_method.name,
+                                    self.prediction_methods)[0]
 
-                    print "Frame is uplink? %s" % (cframe.attrib["uplink"],)
+                    if "seek_mode" not in prediction:
+                        prediction["seek_mode"]= "normal"
 
-                    if int(cframe.attrib["uplink"]) and not uplink:
-                        print "No uplink so we are skipping"
-                        continue
+                    if "processed_files" not in prediction:
+                        prediction["processed_files"]=[]
 
-                    if not int(cframe.attrib["uplink"]) and not downlink:
-                        print "No downlink so we are skipping"
-                        continue
+                    # We will process first non processed burst and pass on
+                    if prediction["seek_mode"]=="normal":
+                        non_used_data= filter(lambda info: 
+                                    info["f"] not in prediction["processed_files"],
+                                self.data)
+                        if non_used_data:
+                            args=[]
 
-                    print "Cracking frame %d with data %s" % (cfn, data)
-                    result= self.CrackFrame( cframe, data.strip() )
-                    if result:
-                        return result
+                            if "args" in prediction: args= prediction["args"]
 
+                            if args.get("process_count")=="all":
+                                count=len(non_used_data)
+                            else:
+                                count= int(args.get("process_count")) or 1
+
+                            if count>len(non_used_data):
+                                count= len(non_used_data)
+
+                            fc= 0
+                            current_index=0
+                            while(fc<len(non_used_data) and current_index<count):
+                                data= non_used_data[fc]
+                                print "Using file", data["f"]
+
+                                prediction["processed_files"].append(data["f"])
+
+                                (prediction_data, frame)= \
+                                         method.Predict(data["capture"], args)
+                                if (not prediction_data) or (not frame):
+                                    print """Prediction method returned 
+                                             no prediciton data or no frame"""
+                                    fc+= 1
+                                    continue
+
+                                if frame.attrib["uplink"] and data.get("ignore_ul"):
+                                    print """You are trying to crack uplink frame, 
+                                        but we are ignoring uplink, so continue"""
+                                    fc+= 1
+                                    continue
+                                if (not frame.attrib["uplink"]) and data.get("ignore_dl"):
+                                    print """You are trying to crack downlink frame, 
+                                        but we are ignoring downlink, so continue"""
+                                    fc+= 1
+                                    continue
+
+                                print "Cracking ul:", str(frame.attrib["uplink"]), " frame", frame.xpath("burst")[-1].attrib["fn"], \
+                                        " with prediction,", prediction_data
+                                result=None
+                                if not debug:
+                                    result= self.CrackFrame(frame, prediction_data)
+
+                                if result:
+                                    print """Key %s for capture %s found with 
+                                             rule %d in %d rounds""" %(data["f"],result,i,rounds)
+                                    return (data["f"],result,i,rounds)
+
+                                fc+= 1
+                                current_index+= 1
+
+                            prediction["end"]= False
+                        else:
+                            prediction["end"]= True
+
+                end=True
+                for prediction in predictions: end= end and prediction["end"]
+
+                rounds+= 1
+
+            print "End of cracking rounds"
+
+        print "Key not found after %d rounds" % (rounds,)
         return False
 
     def CrackFrame( self, frame, data ):
@@ -690,7 +767,11 @@ class gsmcrack(object):
 
         print "Running kraken for keystream", keystream
 
-        tn= telnetlib.Telnet(self.kraken_ip, self.kraken_port)
+        tn= None
+        if self.tn:
+            tn=self.tn
+        else:
+            tn= telnetlib.Telnet(self.kraken_ip, self.kraken_port)
 
         try:
             sleep(2)
@@ -703,9 +784,9 @@ class gsmcrack(object):
         while 1:
             try:
                 (index, match, text)= tn.expect([
-                       'Found\s+([0-9abcdef]+)\s+@\s+([0-9]+)\s+#([0-9]+)',
-                       'crack\s+#([0-9]+)\s+took\s+([0-9]+)\s+msec',
-                       'Cracking\s+#([0-9]+)\s+([01]+)',
+                       '103\s+([0-9]+)\s+([0-9ABCDEF]+)\s+([0-9]+)',
+                       '404\s+([0-9]+)',
+                       '101\s+([0-9]+)',
                       ], 300)
             except:
                 break
@@ -715,7 +796,7 @@ class gsmcrack(object):
                     tn.write("crack %s\r\n" % keystream)
                     continue
                 break
-            elif index==2 and match.group(2) in keystream:
+            elif index==2:
                 id=match.group(1)
                 print "Crack id is:", id
             elif index==1:
@@ -723,19 +804,21 @@ class gsmcrack(object):
                     print "End of crack:", id
                     break
             elif index==0:
-                if match.group(3)==id:
-                    print "New result for crack:", id, match.group(1), match.group(2)
-                    result.append((match.group(1),int(match.group(2)),))
+                if match.group(1)==id:
+                    print "New result for crack:", id, match.group(2), match.group(3)
+                    result.append((match.group(2),int(match.group(3)),))
 
-        tn.close()
         return result
 
-    def __init__( self, filename, kraken_ip="localhost", kraken_port=6010):
+    def __init__( self, files, prediction_methods, 
+            kraken_ip="localhost", kraken_port=6010):
         """
         Initializes gsmcrack with file we want to crack and kraken server params
         
-        :param filename: File we want to crack
-        :type filename: str
+        :param files: File or list of files we want to crack
+        :type files: str, list
+        :param prediction_methods: List of avalible prediction methods
+        :param prediction_methods: list, PredictionMethod
         :param kraken_ip: Ip that kraken is running os
         :type kraken_ip: str
         :param kraken_port: Port that kraken is running on
@@ -744,7 +827,23 @@ class gsmcrack(object):
         :returns : None
         :rtype: None
         """ 
-        self.data= objectify.parse(FileIO(filename))
+
+        #Can accept both one file or list of files
+        self.data=[]
+        print files
+        if not isinstance(files, basestring):
+            for fn in files:
+                print "Loading file", fn
+                try:
+                    self.data.append( {"f": fn, 
+                        "capture": objectify.parse(FileIO(fn))} )
+                except:
+                    print "Cant load", fn
+        else:
+            self.data.append( {"f": files, 
+                "capture":  objectify.parse(FileIO(files))} )
+        self.prediction_methods= prediction_methods
+        self.tn= None
         self.kraken_ip= kraken_ip
         self.kraken_port= kraken_port
 

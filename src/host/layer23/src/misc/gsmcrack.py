@@ -877,14 +877,51 @@ class gsmcrack(object):
         self.kraken_ip= kraken_ip
         self.kraken_port= kraken_port
 
-#if __name__ == "__main__":
-#    a=gsmcrack(sys.argv[1], "localhost", 6666)
-#    KC= a.CrackData(sys.argv[2])
-#    print "KC:", KC
-#
-#    if KC:
-#        print "Decoding data..."
-#        a.DecodeData(KC)
+def parseCapture(args):
+    if not hasattr(args,"prediction"):
+        print "Prediction file not specified"
+        exit(0)
+    files=[]
+
+    for fn in args.data:
+        files.append( glob.glob(fn) )
+    files= [x for sublist in files for x in sublist] #flatten list
+    a= gsmcrack(files, [SysInfo(), offset()], args.kraken_ip, args.kraken_port)
+
+    for prediction in args.prediction:
+        print a.CrackData(prediction, args.debug)
+
+def parseSms(args):
+    sender=None
+    if hasattr(args,"najdisi") and args.najdisi:
+        print "using najdi.si"
+        if not hasattr(args,"najdisi_username"):
+            print "Username for najd.si must be specified"
+            exit(0)
+        if not hasattr(args,"najdisi_password"):
+            print "Password for najdi.si must be specified"
+            exit(0)
+        sender=NajdiSiSms_gsm(args.najdisi_username, args.najdisi_password)
+    if hasattr(args,"atsms") and args.atsms:
+        print "Using at modem"
+        sender=atsms(args.modem)
+
+    if hasattr(args,"findtmsi") and args.findtmsi:
+        if not hasattr(args,"arfcn"):
+            print "You must speciffy arfcns"
+            exit(0)
+        a=findtmsi(args.arfcn, args.immass_count, args.socket, sender, args.number.strip())
+        a.Scan()
+
+    if hasattr(args,"send") and args.send:
+        for x in range(0,args.count):
+            print "Sending sms", x
+            sleep(3)
+            sender.send(args.number.strip(), args.silent)
+
+def parseSmartDecode(args):
+    a=smartdecode()
+    a.SmartDecode(args.capture, args.pin)
 
 if __name__ == "__main__":
     desc="""
@@ -915,6 +952,9 @@ termcolor.colored(
 """,color="green",attrs=['blink']),
     description=desc, 
     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--debug", action="store_true", default=False,
+            help="Should we run in debug mode")
+
     subparsers= parser.add_subparsers()
 
     capture= subparsers.add_parser("capture", description=desc,
@@ -931,32 +971,58 @@ termcolor.colored(
             help="Prediction files to use or folder with predictions")
     capture.add_argument("--kraken_ip", 
             default=os.environ.get("KRAKEN_IP","127.0.0.1"),
-            help="""Ip where you run kraken, default localhost, 
+            help="""Ip where you run kraken (default localhost), 
                     or KRAKEN_IP environment variable""")
-    capture.add_argument("--kraken_port", 
+    capture.add_argument("--kraken_port", type=int,
             default=int(os.environ.get("KRAKEN_PORT",6666)),
-            help="""Port where you run kraken, default 6666,
+            help="""Port where you run kraken (default 6666),
                     or KRAKEN_PORT environemnt variable""")
+    capture.set_defaults(func=parseCapture)
 
-    findtmsi= subparsers.add_parser("findtmsi", description=desc,
+    sms= subparsers.add_parser("sms", description=desc,
             formatter_class=argparse.RawDescriptionHelpFormatter,
             help="Finds tmsi using different methods")
-    findtmsi.add_argument("--arfcn", nargs="+", type=int,
+
+    sms.add_argument("--findtmsi", action="store_true",
+            help="Tries to find tmsi by sending smses")
+    sms.add_argument("--arfcn", nargs="+", type=int,
             help="Arfcns on which to scan")
+    sms.add_argument("--socket", default="/tmp/osmocom_l2",
+            help="Socket where you run osmocom (default \"/tmp/osmocom_l2\")")
+    sms.add_argument("--immass_count", type=int, default=40,
+            help="Count of immidiate assignments to wait (default 40)")
+
+    sms.add_argument("--send", action="store_true",
+            help="Sends sms")
+    sms.add_argument("--count", default=1, type=int,
+            help="Count of smses to send")
+    sms.add_argument("--silent", action="store_true", default=False,
+            help="Sends silent smses")
+
+    sms.add_argument("--najdisi", action="store_true",
+            help="Use najdi.si sms sender")
+    sms.add_argument("--najdisi_username",
+            help="Username for najdi.si")
+    sms.add_argument("--najdisi_password",
+            help="Password for najdi.si")
+
+    sms.add_argument("--atsms", action="store_true",
+            help="Use at modem for sms sender")
+    sms.add_argument("--modem", default="/dev/ttyUSB0",
+            help="TTY device for modem (default /dev/ttyUSB0)")
+
+    sms.add_argument("--number", required=True,
+            help="Number for which we want to find tmsi")
+    sms.set_defaults(func=parseSms)
 
     smart_decode= subparsers.add_parser("smart_decode",description=desc,
             formatter_class=argparse.RawDescriptionHelpFormatter,
             help="Decodes all capture files with help of smart card reader")
+    smart_decode.add_argument("--capture", required= True,
+            help="Pcap capture file to use")
+    smart_decode.add_argument("--pin", required= True,
+            help="Your pin number")
+    smart_decode.set_defaults(func=parseSmartDecode)
 
     args = parser.parse_args()
-
-    if args.crack:
-        if not args.prediction:
-            print "Prediction file not specified"
-            exit(0)
-        for data in args.data:
-            a= gsmcrack(data,args.kraken_ip, args.kraken_port)
-            for prediction in args.prediction:
-                a.CrackData(prediction)
-    #if args.findtmsi:
-    #    a=findtmsi(
+    args.func(args)

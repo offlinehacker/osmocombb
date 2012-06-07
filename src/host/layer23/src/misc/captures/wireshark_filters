@@ -1,0 +1,2 @@
+Filter paging responses and service requests:
+gsmtap && (gsm_a.dtap_msg_rr_type==0x27 || gsm_a.dtap_msg_mm_type==0x24)

@@ -1,9 +1,9 @@
 class PredictionMethod(object):
-    def splitCount(self, s, count):
+    def _splitCount(self, s, count):
          return [''.join(x) for x in zip(*[list(s[z::count]) for z in range(count)])]
 
     def _alterByte(self, data, offset, byte):
-        t= self.splitCount(data,2)
+        t= self._splitCount(data,2)
         t[offset]= "%02x" % (int(t[offset],16)+byte)
         return "".join(t)
 

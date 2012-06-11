@@ -1,3 +1,6 @@
+{ "method": "optimizer", "args": { "predictPattern": "xxxxxx0518032b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b", "startPattern": "xxxxxx0627xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "files": "predictions/learned/mobitel_*.dat", "process_count": 2}, "seek_mode": "normal"}
+{ "method": "offset", "args": { "offset": 7, "prediction": "03420d0518032b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b", "process_count": 2}, "seek_mode": "normal"}
+{ "method": "offset", "args": { "offset": 7, "prediction": "03620d0518032b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b", "process_count": 2}, "seek_mode": "normal"}
 { "method": "offset", "args": { "offset": 5, "prediction": "03620d0518032b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b", "process_count": 2}, "seek_mode": "normal"}
 { "method": "offset", "args": { "offset": 3, "prediction": "03420d0518032b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b", "process_count": 2}, "seek_mode": "normal"}
 { "method": "offset", "args": { "offset": 1, "prediction": "03420d0518032b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b", "process_count": 2}, "seek_mode": "normal"}

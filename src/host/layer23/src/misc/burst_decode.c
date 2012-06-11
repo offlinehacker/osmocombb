@@ -127,7 +127,7 @@ bursts_decode()
 
             printf( "RAW DATA: ");
             for  (i=0; i<23; i++)
-                printf( "%x ", l2[i]);
+                printf( "%02x", l2[i]);
             printf( "\n");
 
 			/* Send to GSMTAP */

@@ -31,6 +31,7 @@ from smspdu import SMS_SUBMIT
 
 from prediction_methods import SysInfo
 from prediction_methods import offset
+from prediction_methods import optimizer
 
 from multiprocessing import Process
 from najdisisms import NajdiSiSms
@@ -97,11 +98,11 @@ class smartdecode(object):
                 if tmsi not in results:
                     results[tmsi]= { frameno: 
                             {"kc": self.SmartCardGetKcFromRand(rand, pin), 
-                                "frameno": [frameno,] }}
+                                "frameno": [] }}
                 else:
                     results[tmsi][frameno]= {"kc":  
                             self.SmartCardGetKcFromRand(rand, pin), 
-                                "frameno": [frameno,]}
+                                "frameno": []}
                 print "KC:", results[tmsi][frameno]["kc"]
 
                 frameno= 0
@@ -145,12 +146,9 @@ class smartdecode(object):
                     continue
             results[tmsi][closest_lu_frameno]["frameno"].append(int(frameno))
 
-        for tmsi in results:
-            for lu_frameno in results[tmsi]:
-                for frameno in results[tmsi][lu_frameno]["frameno"]:
-                    self.DecodeFrames( frameno, results[tmsi][lu_frameno]["kc"] )
+        return results
 
-    def DecodeFrames( self, frameno, kc ):
+    def DecodeFrames( self, frameno, kc, wireshark=True):
         """
         Decodes frames based on frame number and kc.
         So if we know where transaction occured we know which file to decode
@@ -160,8 +158,9 @@ class smartdecode(object):
         :param kc: Kc witch which we want to decode
         :type kc: str
         
-        :return: None
-        :rtype: None
+        :return: Returns a set of filename and xml object where transaction 
+                 occured
+        :rtype: List, str, etree
         """ 
 
         max= sys.maxint
@@ -177,10 +176,34 @@ class smartdecode(object):
                     result= file
 
         if result:
-            print result
-
+            print "Our frames should be in ", result
             print "Decoded bursts", result
-            print gsmrecode.DecodeData(kc, result)
+            ret= gsmrecode.DecodeData(kc, result, wireshark)
+            ret.write(result)
+
+            return (result,ret)
+
+        return None
+
+    def Output(self, capture_file, pin=None):
+        results= self.SmartDecode(capture_file, pin)
+        for tmsi in results:
+            for lu_frameno in results[tmsi]:
+                for frameno in results[tmsi][lu_frameno]["frameno"]:
+                    print self.DecodeFrames( frameno, 
+                            results[tmsi][lu_frameno]["kc"] )[1].xpath("frame/data")
+
+    def LearnPredictions(self, capture_file, pin, prefix="", folder=""):
+        results= self.SmartDecode(capture_file, pin)
+        for tmsi in results:
+            for lu_frameno in results[tmsi]:
+                for frameno in results[tmsi][lu_frameno]["frameno"]:
+                    (filename,xml)= self.DecodeFrames( frameno, 
+                            results[tmsi][lu_frameno]["kc"] )
+
+                    res= raw_input("Do you want to learn this capture? [y/n] ")
+                    if "y" in res:
+                        xml.write(os.path.join(folder,prefix+"_"+filename))
 
 class NajdiSiSms_gsm(object):
     """
@@ -416,14 +439,14 @@ class gsmrecode(object):
         :rtype: str
         """ 
 
-        result= objectify.parse(io.StringIO(unicode(subprocess.check_output( "./burst_encode --data %s" % (data,),  shell=True))))
+        result= objectify.parse(io.StringIO(unicode(subprocess.check_output( "~/osmocom-bb/src/host/layer23/src/misc/burst_encode --data %s" % (data,),  shell=True))))
         result= result.xpath("/frame/burst/text()")
 
         return result
 
     RunEncodeBursts=Callable(_RunEncodeBursts)
 
-    def _RunDecodeBursts( frame, kc ) :
+    def _RunDecodeBursts( frame, kc, wireshark=True ) :
         """
         Tries to decode bursts
 
@@ -443,7 +466,10 @@ class gsmrecode(object):
             out+= "--burst %s " % (burst.cyphertext.text.strip(),)
 
         try:
-            main_params= "./burst_decode -i 127.0.0.1 --ul %d --fn %d -t %d " % (int(frame.attrib["uplink"]), int(frame.xpath("burst")[0].attrib["fn"]), int(frame.chan_type),)
+            if wireshark:
+                main_params= "~/osmocom-bb/src/host/layer23/src/misc/burst_decode -i 127.0.0.1 --ul %d --fn %d -t %d " % (int(frame.attrib["uplink"]), int(frame.xpath("burst")[0].attrib["fn"]), int(frame.chan_type),)
+            else:
+                main_params= "~/osmocom-bb/src/host/layer23/src/misc/burst_decode --ul %d --fn %d -t %d " % (int(frame.attrib["uplink"]), int(frame.xpath("burst")[0].attrib["fn"]), int(frame.chan_type),)
         except:
             print "Error:", sys.exc_info()[0]
             return None
@@ -465,7 +491,7 @@ class gsmrecode(object):
 
     RunDecodeBursts= Callable(_RunDecodeBursts)
 
-    def _DecodeData( kc, data ):
+    def _DecodeData( kc, data, wireshark=True ):
         """
         Decodes input data
         
@@ -482,10 +508,11 @@ class gsmrecode(object):
         if isinstance(data, basestring):
             data= objectify.parse(FileIO(data))
 
-        frames= data.xpath("/scan/frame")
-        data= []
+        frames= data.xpath("frame")
         for frame in frames:
-            data.append(gsmrecode.RunDecodeBursts( frame, kc ))
+            decodedFrame= gsmrecode.RunDecodeBursts( frame, kc, wireshark )
+            if decodedFrame:
+                frame.data= objectify.fromstring("\n<data>"+decodedFrame+"</data>\n")
 
         return data
 
@@ -536,7 +563,7 @@ class gsmcrack(object):
 
         return r
 
-    def CrackData( self, PredictFile=None, debug=False ):
+    def CrackData( self, PredictFile=None, debug=True ):
         """
         Cracks data using prediction file
 
@@ -642,6 +669,9 @@ class gsmcrack(object):
 
                                 prediction["processed_files"].append(data["f"])
 
+                                if debug:
+                                    args["skip_file"]= data["f"]
+
                                 (prediction_data, frame)= \
                                          method.Predict(data["capture"], args)
                                 if (not prediction_data) or (not frame):
@@ -664,8 +694,12 @@ class gsmcrack(object):
                                 print "Cracking ul:", str(frame.attrib["uplink"]), " frame", frame.xpath("burst")[-1].attrib["fn"], \
                                         " with prediction,", prediction_data
                                 result=None
-                                if not debug:
+                                if debug!=True:
                                     result= self.CrackFrame(frame, prediction_data)
+                                else:
+                                    if frame.xpath("data")[0].text.strip()==prediction_data:
+                                        print "Prediction is correct"
+                                        return (data["f"],"",i,rounds)
 
                                 if result:
                                     print """Key %s for capture %s found with 
@@ -771,7 +805,7 @@ class gsmcrack(object):
               framecount2 %d and keystream %s" % (key, offset, framecount1,
                       framecount2, keystream )
 
-        result= subprocess.check_output("./find_kc %s %d %d %d %s" % 
+        result= subprocess.check_output("~/osmocom-bb/src/host/layer23/src/misc/find_kc %s %d %d %d %s" % 
                 (key, offset, framecount1, framecount2, keystream), shell=True)
         result = re.search('([0-9abcdef ]+) \*\*\* MATCHED \*\*\*', result)
         if result:
@@ -878,18 +912,32 @@ class gsmcrack(object):
         self.kraken_port= kraken_port
 
 def parseCapture(args):
-    if not hasattr(args,"prediction"):
-        print "Prediction file not specified"
-        exit(0)
-    files=[]
+    if hasattr(args,"crack") and args.crack:
+        if not hasattr(args,"prediction"):
+            print "Prediction file not specified"
+            exit(0)
 
-    for fn in args.data:
-        files.append( glob.glob(fn) )
-    files= [x for sublist in files for x in sublist] #flatten list
-    a= gsmcrack(files, [SysInfo(), offset()], args.kraken_ip, args.kraken_port)
+        files=[]
+        for fn in args.data:
+            files.append( glob.glob(fn) )
+        files= [x for sublist in files for x in sublist] #flatten list
+        a= gsmcrack(files, [SysInfo(), offset(), optimizer()], args.kraken_ip, args.kraken_port)
 
-    for prediction in args.prediction:
-        print a.CrackData(prediction, args.debug)
+        for prediction in args.prediction:
+            print a.CrackData(prediction, args.debug)
+    if hasattr(args,"decode") and args.decode:
+        if not hasattr(args,"kc"):
+            print "Kc has to be specified"
+            exit(0)
+
+        files=[]
+        for fn in args.data:
+            files.append( glob.glob(fn) )
+        files= [x for sublist in files for x in sublist] #flatten list
+        a=gsmrecode()
+        for f in files:
+            a.DecodeData(args.kc,f)
+
 
 def parseSms(args):
     sender=None
@@ -921,7 +969,12 @@ def parseSms(args):
 
 def parseSmartDecode(args):
     a=smartdecode()
-    a.SmartDecode(args.capture, args.pin)
+
+    if hasattr(args,"learn") and args.learn:
+        a.LearnPredictions(args.capture,args.pin, 
+                args.learn_prefix, args.learn_folder)
+    else:
+        a.Output(args.capture, args.pin)
 
 if __name__ == "__main__":
     desc="""
@@ -963,8 +1016,10 @@ termcolor.colored(
     capture_group= capture.add_mutually_exclusive_group()
     capture_group.add_argument("--crack", action="store_true", 
             help="Cracks passed data")
-    capture_group.add_argument("--decode", action="store_true", 
+    capture_group.add_argument("--decode", action="store_true",
             help="Decodes passed data")
+    capture.add_argument("--kc",
+            help="Key to use for decoding")
     capture.add_argument("--data", required=True, nargs="+",
             help="Capture files to make action on")
     capture.add_argument("--prediction", nargs="+",
@@ -1018,6 +1073,12 @@ termcolor.colored(
     smart_decode= subparsers.add_parser("smart_decode",description=desc,
             formatter_class=argparse.RawDescriptionHelpFormatter,
             help="Decodes all capture files with help of smart card reader")
+    smart_decode.add_argument("--learn", action="store_true",
+            help="Learn captures and add them to database")
+    smart_decode.add_argument("--learn_prefix", default="",
+            help="Prefix to filename")
+    smart_decode.add_argument("--learn_folder", default="",
+            help="Folder where is your learning database")
     smart_decode.add_argument("--capture", required= True,
             help="Pcap capture file to use")
     smart_decode.add_argument("--pin", required= True,

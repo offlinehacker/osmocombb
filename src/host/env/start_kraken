@@ -1,0 +1,3 @@
+#!/bin/bash
+cd ~/kraken-win32/Kraken/
+./kraken ../../kraken/indexes/ 6666

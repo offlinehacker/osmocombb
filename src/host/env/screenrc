@@ -1,0 +1,13 @@
+source ~/.screenrc
+setenv PATH $PATH:~/osmocom-bb/src/host/layer23/src/misc/:~/osmocom-bb-identity/src/host/layer23/src/mobile/
+setenv PATH $PATH:~/osmocom-bb/src/host/env/
+setenv PATH $PATH:~/kraken-win32/Kraken/
+screen -t notes nano crack1
+screen -t wireshark wireshark
+screen -t kraken
+screen -t l1_sniffer
+screen -t capture_crack
+screen -t mon
+screen -t l1_mobile
+screen -t mobile
+screen -t mobile_control
